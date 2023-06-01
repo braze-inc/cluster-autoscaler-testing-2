@@ -152,7 +152,7 @@ func (r listerRegistryImpl) StatefulSetLister() v1appslister.StatefulSetLister {
 
 // PodLister lists pods.
 type PodLister interface {
-	List() ([]*apiv1.Pod, error)
+	List(workers int) ([]*apiv1.Pod, error)
 }
 
 // UnschedulablePodLister lists unscheduled pods
@@ -180,7 +180,7 @@ func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsCha
 }
 
 // List returns all unscheduled pods.
-func (unschedulablePodLister *UnschedulablePodLister) List() ([]*apiv1.Pod, error) {
+func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv1.Pod, error) {
 	//	var unschedulablePods []*apiv1.Pod
 	//	allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
 	//	if err != nil {
@@ -266,7 +266,7 @@ type ScheduledPodLister struct {
 }
 
 // List returns all scheduled pods.
-func (lister *ScheduledPodLister) List() ([]*apiv1.Pod, error) {
+func (lister *ScheduledPodLister) List(workers int) ([]*apiv1.Pod, error) {
 	return lister.podLister.List(labels.Everything())
 }
 
