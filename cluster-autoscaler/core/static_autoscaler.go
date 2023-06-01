@@ -56,6 +56,8 @@ import (
 	"k8s.io/utils/integer"
 
 	klog "k8s.io/klog/v2"
+
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 const (
@@ -274,6 +276,10 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 	autoscalingContext := a.AutoscalingContext
 
 	klog.V(4).Info("Starting main loop")
+
+	// Start a root span
+	rootSpan := tracer.StartSpan("autoscaling_loop")
+	defer rootSpan.Finish()
 
 	stateUpdateStart := time.Now()
 
