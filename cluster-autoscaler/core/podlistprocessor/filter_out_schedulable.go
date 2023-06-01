@@ -64,7 +64,7 @@ func (p *filterOutSchedulablePodListProcessor) Process(context *context.Autoscal
 	klog.V(4).Infof("Filtering out schedulables")
 	filterOutSchedulableStart := time.Now()
 
-	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot)
+	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot, context.WorkerThrads)
 
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (p *filterOutSchedulablePodListProcessor) CleanUp() {
 // unschedulable can be scheduled on free capacity on existing nodes by trying to pack the pods. It
 // tries to pack the higher priority pods first. It takes into account pods that are bound to node
 // and will be scheduled after lower priority pod preemption.
-func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(unschedulableCandidates []*apiv1.Pod, clusterSnapshot clustersnapshot.ClusterSnapshot) ([]*apiv1.Pod, error) {
+func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(unschedulableCandidates []*apiv1.Pod, clusterSnapshot clustersnapshot.ClusterSnapshot, workers int) ([]*apiv1.Pod, error) {
 	// Sort unschedulable pods by importance
 	sort.Slice(unschedulableCandidates, func(i, j int) bool {
 		return corev1helpers.PodPriority(unschedulableCandidates[i]) > corev1helpers.PodPriority(unschedulableCandidates[j])
@@ -119,11 +119,11 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 	// Worker setup
 	var lock = sync.RWMutex{}
 	var wg sync.WaitGroup
-	threads := 5
-	wg.Add(threads)
+	//threads := 15
+	wg.Add(workers)
 
-	klog.Infof("+++ Spinning up %v workers", threads)
-	for i := 0; i < threads; i++ {
+	klog.Infof("+++ Spinning up %v workers", workers)
+	for i := 0; i < workers; i++ {
 		go func(workerId int) {
 			findUnschedulablePods(&wg, lock, workerId, scheduledPods, unschedulableCandidatesChan, unschedulablePodsChan)
 		}(i)

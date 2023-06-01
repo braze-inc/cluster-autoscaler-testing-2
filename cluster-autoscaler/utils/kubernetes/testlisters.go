@@ -35,7 +35,7 @@ type TestPodLister struct {
 }
 
 // List returns all pods in test lister.
-func (lister TestPodLister) List() ([]*apiv1.Pod, error) {
+func (lister TestPodLister) List(workers int) ([]*apiv1.Pod, error) {
 	return lister.pods, nil
 }
 

@@ -206,12 +206,12 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 	//scheduledPodsChan := make(chan *apiv1.Pod, 1000)
 	unschedulablePodsChan := make(chan *apiv1.Pod, 1000)
 
-	threads := 5
+	//threads := 5
 	var wg sync.WaitGroup
-	wg.Add(threads)
+	wg.Add(workers)
 
-	klog.Infof("+++ Spinning up %v workers", threads)
-	for i := 0; i < threads; i++ {
+	klog.Infof("+++ Spinning up %v workers", workers)
+	for i := 0; i < workers; i++ {
 		go func(workerId int) {
 			//listScheduledAndUnschedulablePods(&wg, workerId, podsChan, scheduledPodsChan, unschedulablePodsChan)
 			listScheduledAndUnschedulablePods(&wg, workerId, podsChan, unschedulablePodsChan)
