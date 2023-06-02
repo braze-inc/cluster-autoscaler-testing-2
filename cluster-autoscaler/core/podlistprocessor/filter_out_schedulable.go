@@ -125,7 +125,7 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 	klog.Infof("+++ Spinning up %v workers", workers)
 	for i := 0; i < workers; i++ {
 		go func(workerId int) {
-			findUnschedulablePods(&wg, lock, workerId, scheduledPods, unschedulableCandidatesChan, unschedulablePodsChan)
+			findUnschedulablePods(&wg, &lock, workerId, scheduledPods, unschedulableCandidatesChan, unschedulablePodsChan)
 		}(i)
 	}
 
@@ -156,9 +156,8 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 	return unschedulablePods, nil
 }
 
-func findUnschedulablePods(wg *sync.WaitGroup, lock sync.RWMutex, workerId int, scheduledPods map[types.UID]bool,
+func findUnschedulablePods(wg *sync.WaitGroup, lock *sync.RWMutex, workerId int, scheduledPods map[types.UID]bool,
 	unschedulableCandidatesChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
-	klog.Infof("+++ inside worker %v", workerId)
 	defer wg.Done()
 
 	for pod := range unschedulableCandidatesChan {

@@ -161,6 +161,7 @@ type UnschedulablePodLister struct {
 }
 
 func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
+	klog.Infof("+++ worker %d in listers.listScheduledAndUnschedulablePods()", workerId)
 
 	defer wg.Done()
 
@@ -181,20 +182,6 @@ func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsCha
 
 // List returns all unscheduled pods.
 func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv1.Pod, error) {
-	//	var unschedulablePods []*apiv1.Pod
-	//	allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
-	//	if err != nil {
-	//		return unschedulablePods, err
-	//	}
-	//	for _, pod := range allPods {
-	//		_, condition := podv1.GetPodCondition(&pod.Status, apiv1.PodScheduled)
-	//		if condition != nil && condition.Status == apiv1.ConditionFalse && condition.Reason == apiv1.PodReasonUnschedulable {
-	//			unschedulablePods = append(unschedulablePods, pod)
-	//		}
-	//	}
-	//	return unschedulablePods, nil
-
-	//_scheduledPods := make([]*apiv1.Pod, 0)
 	_unschedulablePods := make([]*apiv1.Pod, 0)
 
 	allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
@@ -203,41 +190,34 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 	}
 
 	podsChan := make(chan *apiv1.Pod, 1000)
-	//scheduledPodsChan := make(chan *apiv1.Pod, 1000)
 	unschedulablePodsChan := make(chan *apiv1.Pod, 1000)
 
-	//threads := 5
 	var wg sync.WaitGroup
 	wg.Add(workers)
 
 	klog.Infof("+++ Spinning up %v workers", workers)
 	for i := 0; i < workers; i++ {
-		go func(workerId int) {
-			//listScheduledAndUnschedulablePods(&wg, workerId, podsChan, scheduledPodsChan, unschedulablePodsChan)
-			listScheduledAndUnschedulablePods(&wg, workerId, podsChan, unschedulablePodsChan)
-		}(i)
+		go listScheduledAndUnschedulablePods(&wg, i, podsChan, unschedulablePodsChan)
 	}
 
 	// Push all pods into channel by looping over slice
-	for _, pod := range allPods {
-		podsChan <- pod
-	}
+	go func(c chan *apiv1.Pod) {
+		for _, pod := range allPods {
+			c <- pod
+		}
+		close(c)
+	}(podsChan)
+
 	go func() {
-		close(podsChan)
 		wg.Wait()
-		//close(scheduledPodsChan)
 		close(unschedulablePodsChan)
 	}()
 
-	//for p := range scheduledPodsChan {
-	//	_scheduledPods = append(_scheduledPods, p)
-	//}
 	for p := range unschedulablePodsChan {
 		_unschedulablePods = append(_unschedulablePods, p)
 	}
 
 	klog.Infof("+++ unscheduled pod count: %v", len(_unschedulablePods))
-	//return _scheduledPods, _unschedulablePods, nil
 	return _unschedulablePods, nil
 }
 
