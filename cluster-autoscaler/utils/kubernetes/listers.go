@@ -161,7 +161,6 @@ type UnschedulablePodLister struct {
 }
 
 func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
-	klog.Infof("+++ worker %d in listers.listScheduledAndUnschedulablePods()", workerId)
 
 	defer wg.Done()
 
