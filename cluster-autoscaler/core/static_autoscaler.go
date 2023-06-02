@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	goctx "context"
 	"fmt"
 	"reflect"
 	"time"
@@ -57,6 +58,7 @@ import (
 
 	klog "k8s.io/klog/v2"
 
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
@@ -79,6 +81,8 @@ const (
 type StaticAutoscaler struct {
 	// AutoscalingContext consists of validated settings and options for this autoscaler
 	*context.AutoscalingContext
+	// tracingContext consists of tracing specific context for ddtrace
+	TracingContext goctx.Context
 	// ClusterState for maintaining the state of cluster nodes.
 	clusterStateRegistry    *clusterstate.ClusterStateRegistry
 	lastScaleUpTime         time.Time
@@ -197,8 +201,14 @@ func NewStaticAutoscaler(
 	// Set the initial scale times to be less than the start time so as to
 	// not start in cooldown mode.
 	initialScaleTime := time.Now().Add(-time.Hour)
+
+	// Init span-specific context
+	sctx, cancel := goctx.WithTimeout(goctx.Background(), time.Second)
+	defer cancel()
+
 	return &StaticAutoscaler{
 		AutoscalingContext:      autoscalingContext,
+		TracingContext:          sctx,
 		lastScaleUpTime:         initialScaleTime,
 		lastScaleDownDeleteTime: initialScaleTime,
 		lastScaleDownFailTime:   initialScaleTime,
@@ -277,8 +287,9 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 
 	klog.V(4).Info("Starting main loop")
 
-	// Start a root span
-	rootSpan := tracer.StartSpan("autoscaling_loop")
+	// Start root span
+	var rootSpan ddtrace.Span
+	rootSpan, a.TracingContext = tracer.StartSpanFromContext(a.TracingContext, "autoscaling_loop")
 	defer rootSpan.Finish()
 
 	stateUpdateStart := time.Now()
@@ -834,6 +845,9 @@ func (a *StaticAutoscaler) ExitCleanUp() {
 }
 
 func (a *StaticAutoscaler) obtainNodeLists(cp cloudprovider.CloudProvider) ([]*apiv1.Node, []*apiv1.Node, errors.AutoscalerError) {
+	// Start child span
+	span, _ := tracer.StartSpanFromContext(tracer.ChildOf(a.TracingContext))
+
 	allNodes, err := a.AllNodeLister().List()
 	if err != nil {
 		klog.Errorf("Failed to list all nodes: %v", err)

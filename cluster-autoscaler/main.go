@@ -463,7 +463,7 @@ func run(healthCheck *metrics.HealthCheck, debuggingSnapshotter debuggingsnapsho
 }
 
 func main() {
-	// Instrument with Datadog APM
+	// Init Datadog tracer
 	tracer.Start()
 	defer tracer.Stop()
 
