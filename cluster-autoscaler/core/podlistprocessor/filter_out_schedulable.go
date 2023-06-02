@@ -130,13 +130,15 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 	}
 
 	// Push all unschedulable pods into channel by looping over slice
-	for _, pod := range unschedulableCandidates {
-		unschedulableCandidatesChan <- pod
-	}
+	go func(c chan *apiv1.Pod) {
+		for _, pod := range unschedulableCandidates {
+			unschedulableCandidatesChan <- pod
+		}
+		close(c)
+	}(unschedulableCandidatesChan)
 
 	// Close out channels and wait for workers to complete
 	go func() {
-		close(unschedulableCandidatesChan)
 		wg.Wait()
 		//close(scheduledPodsChan)
 		close(unschedulablePodsChan)
