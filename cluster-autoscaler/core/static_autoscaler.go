@@ -202,13 +202,8 @@ func NewStaticAutoscaler(
 	// not start in cooldown mode.
 	initialScaleTime := time.Now().Add(-time.Hour)
 
-	// Init span-specific context
-	sctx, cancel := goctx.WithTimeout(goctx.Background(), time.Second)
-	defer cancel()
-
 	return &StaticAutoscaler{
 		AutoscalingContext:      autoscalingContext,
-		TracingContext:          sctx,
 		lastScaleUpTime:         initialScaleTime,
 		lastScaleDownDeleteTime: initialScaleTime,
 		lastScaleDownFailTime:   initialScaleTime,
@@ -287,9 +282,14 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 
 	klog.V(4).Info("Starting main loop")
 
+	// Init trace context
+	tctx, cancel := goctx.WithTimeout(goctx.Background(), time.Second)
+	defer cancel()
+
 	// Start root span
 	var rootSpan ddtrace.Span
-	rootSpan, a.TracingContext = tracer.StartSpanFromContext(a.TracingContext, "autoscaling_loop")
+	rootSpan = tracer.StartSpan(string(metrics.Main))
+	rootSpan, a.TracingContext = tracer.StartSpanFromContext(tctx, string(metrics.Main))
 	defer rootSpan.Finish()
 
 	stateUpdateStart := time.Now()
@@ -324,7 +324,11 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 
 	// Call CloudProvider.Refresh before any other calls to cloud provider.
 	refreshStart := time.Now()
+	// Start child span for metrics.CloudProviderRefresh
+	spanCloudProviderRefresh, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.CloudProviderRefresh))
 	err = a.AutoscalingContext.CloudProvider.Refresh()
+	// Finish child span for metrics.CloudProviderRefresh
+	spanCloudProviderRefresh.Finish()
 	metrics.UpdateDurationFromStart(metrics.CloudProviderRefresh, refreshStart)
 	if err != nil {
 		klog.Errorf("Failed to refresh cloud provider config: %v", err)
@@ -491,7 +495,11 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		a.AutoscalingContext.DebuggingSnapshotter.SetClusterNodes(l)
 	}
 
+	// Start child span for metrics.FilterOutSchedulable
+	spanFilterOutSchedulable, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.FilterOutSchedulable))
 	unschedulablePodsToHelp, _ := a.processors.PodListProcessor.Process(a.AutoscalingContext, unschedulablePods)
+	// Finish child span for metrics.FilterOutSchedulable
+	spanFilterOutSchedulable.Finish()
 
 	// finally, filter out pods that are too "young" to safely be considered for a scale-up (delay is configurable)
 	unschedulablePodsToHelp = a.filterOutYoungPods(unschedulablePodsToHelp, currentTime)
@@ -538,11 +546,17 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		scaleUpStatus.Result = status.ScaleUpInCooldown
 		klog.V(1).Info("Unschedulable pods are very new, waiting one iteration for more")
 	} else {
+		// Start child span for metrics.ScaleUp
+		spanScaleUp, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleUp))
 		scaleUpStart := preScaleUp()
 		scaleUpStatus, typedErr = ScaleUp(autoscalingContext, a.processors, a.clusterStateRegistry, a.scaleUpResourceManager, unschedulablePodsToHelp, readyNodes, daemonsets, nodeInfosForGroups, a.ignoredTaints)
 		if exit, err := postScaleUp(scaleUpStart); exit {
+			// Finish child span for metrics.ScaleUp
+			spanScaleUp.Finish()
 			return err
 		}
+		// Finish child span for metrics.ScaleUp
+		spanScaleUp.Finish()
 	}
 
 	if a.ScaleDownEnabled {
@@ -556,6 +570,9 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		unneededStart := time.Now()
 
 		klog.V(4).Infof("Calculating unneeded nodes")
+
+		// Start child span for metrics.ScaleDownNodeDeletion
+		spanFindUnneeded, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.FindUnneeded))
 
 		var scaleDownCandidates []*apiv1.Node
 		var podDestinations []*apiv1.Node
@@ -596,6 +613,8 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 			return typedErr
 		}
 
+		// Finish child span for metrics.ScaleDownNodeDeletion
+		spanFindUnneeded.Finish()
 		metrics.UpdateDurationFromStart(metrics.FindUnneeded, unneededStart)
 
 		scaleDownInCooldown := a.processorCallbacks.disableScaleDownForLoop ||
@@ -614,6 +633,10 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		} else {
 			klog.V(4).Infof("Starting scale down")
 
+			// Start child span for metrics.ScaleDown
+			span, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleDown))
+			defer span.Finish()
+
 			// We want to delete unneeded Node Groups only if there was no recent scale up,
 			// and there is no current delete in progress and there was no recent errors.
 			_, drained := actuationStatus.DeletionsInProgress()
@@ -629,8 +652,14 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 			scaleDownStart := time.Now()
 			metrics.UpdateLastTime(metrics.ScaleDown, scaleDownStart)
 			empty, needDrain := a.scaleDownPlanner.NodesToDelete(currentTime)
+
+			// Start child span for metrics.ScaleDownNodeDeletion
+			spanScaleDownNodeDeletion, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleDownNodeDeletion))
 			scaleDownStatus, typedErr := a.scaleDownActuator.StartDeletion(empty, needDrain, currentTime)
 			a.scaleDownActuator.ClearResultsNotNewerThan(scaleDownStatus.NodeDeleteResultsAsOf)
+
+			// Finish child span for metrics.ScaleDownNodeDeletion
+			spanScaleDownNodeDeletion.Finish()
 			metrics.UpdateDurationFromStart(metrics.ScaleDown, scaleDownStart)
 			metrics.UpdateUnremovableNodesCount(countsByReason(a.scaleDownPlanner.UnremovableNodes()))
 
@@ -646,7 +675,10 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 				a.AutoscalingContext.AutoscalingOptions.MaxBulkSoftTaintCount != 0 {
 				taintableNodes := a.scaleDownPlanner.UnneededNodes()
 				untaintableNodes := subtractNodes(allNodes, taintableNodes)
+				// Start child span for metrics.ScaleDownSoftTaintUnneeded
+				spanScaleDownSoftTaintUnneeded, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleDownSoftTaintUnneeded))
 				actuation.UpdateSoftDeletionTaints(a.AutoscalingContext, taintableNodes, untaintableNodes)
+				spanScaleDownSoftTaintUnneeded.Finish()
 			}
 
 			if a.processors != nil && a.processors.ScaleDownStatusProcessor != nil {
@@ -845,9 +877,6 @@ func (a *StaticAutoscaler) ExitCleanUp() {
 }
 
 func (a *StaticAutoscaler) obtainNodeLists(cp cloudprovider.CloudProvider) ([]*apiv1.Node, []*apiv1.Node, errors.AutoscalerError) {
-	// Start child span
-	span, _ := tracer.StartSpanFromContext(tracer.ChildOf(a.TracingContext))
-
 	allNodes, err := a.AllNodeLister().List()
 	if err != nil {
 		klog.Errorf("Failed to list all nodes: %v", err)
@@ -870,6 +899,10 @@ func (a *StaticAutoscaler) obtainNodeLists(cp cloudprovider.CloudProvider) ([]*a
 }
 
 func (a *StaticAutoscaler) updateClusterState(allNodes []*apiv1.Node, nodeInfosForGroups map[string]*schedulerframework.NodeInfo, currentTime time.Time) errors.AutoscalerError {
+	// Start child span for metrics.UpdateState
+	span, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.UpdateState))
+	defer span.Finish()
+
 	err := a.clusterStateRegistry.UpdateNodes(allNodes, nodeInfosForGroups, currentTime)
 	if err != nil {
 		klog.Errorf("Failed to update node registry: %v", err)
