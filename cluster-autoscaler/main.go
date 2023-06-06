@@ -66,6 +66,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
 // MultiStringFlag is a flag for passing multiple parameters using same flag
@@ -218,7 +219,9 @@ var (
 	scaleDownSimulationTimeout         = flag.Duration("scale-down-simulation-timeout", 5*time.Minute, "How long should we run scale down simulation.")
 	parallelDrain                      = flag.Bool("parallel-drain", false, "Whether to allow parallel drain of nodes.")
 
-	enableDatadogTracing = flag.Bool("enable-datadog-tracing", false, "Whether Datadog tracing should be enabled.")
+	// Braze Flags
+	enableDatadogTracing   = flag.Bool("enable-datadog-tracing", false, "Whether Datadog tracing should be enabled.")
+	enableDatadogProfiling = flag.Bool("enable-datadog-profiling", false, "Whether Datadog profiling should be enabled.")
 )
 
 func createAutoscalingOptions() config.AutoscalingOptions {
@@ -480,6 +483,15 @@ func main() {
 	if *enableDatadogTracing {
 		tracer.Start()
 		defer tracer.Stop()
+	}
+
+	// Init Datadog Profiler
+	if *enableDatadogProfiling {
+		err := profiler.Start()
+		if err != nil {
+			klog.Fatal(err)
+		}
+		defer profiler.Stop()
 	}
 
 	healthCheck := metrics.NewHealthCheck(*maxInactivityTimeFlag, *maxFailingTimeFlag)
