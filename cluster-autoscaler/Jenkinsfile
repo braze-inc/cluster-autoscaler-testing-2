@@ -9,7 +9,7 @@ stage("scm") {
     gitSHA = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%h'").trim()
 }
 stage("build") {
-    dockerImageBuilder("braze-cluster-autoscaler", gitSHA, '')
+    dockerImageBuilder("braze-cluster-autoscaler", gitSHA, 'cluster-autoscaler', 'Dockerfile.amd64')
   }
 }
 
