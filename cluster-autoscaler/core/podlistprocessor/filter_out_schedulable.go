@@ -18,6 +18,7 @@ package podlistprocessor
 
 import (
 	"sort"
+	"sync"
 	"time"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -63,7 +64,7 @@ func (p *filterOutSchedulablePodListProcessor) Process(context *context.Autoscal
 	klog.V(4).Infof("Filtering out schedulables")
 	filterOutSchedulableStart := time.Now()
 
-	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot)
+	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot, context.WorkerThrads)
 
 	if err != nil {
 		return nil, err
@@ -92,7 +93,7 @@ func (p *filterOutSchedulablePodListProcessor) CleanUp() {
 // unschedulable can be scheduled on free capacity on existing nodes by trying to pack the pods. It
 // tries to pack the higher priority pods first. It takes into account pods that are bound to node
 // and will be scheduled after lower priority pod preemption.
-func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(unschedulableCandidates []*apiv1.Pod, clusterSnapshot clustersnapshot.ClusterSnapshot) ([]*apiv1.Pod, error) {
+func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(unschedulableCandidates []*apiv1.Pod, clusterSnapshot clustersnapshot.ClusterSnapshot, workers int) ([]*apiv1.Pod, error) {
 	// Sort unschedulable pods by importance
 	sort.Slice(unschedulableCandidates, func(i, j int) bool {
 		return corev1helpers.PodPriority(unschedulableCandidates[i]) > corev1helpers.PodPriority(unschedulableCandidates[j])
@@ -108,19 +109,66 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 		scheduledPods[status.Pod.UID] = true
 	}
 
+	// Channels to sync workers
+	unschedulableCandidatesChan := make(chan *apiv1.Pod, 1000)
+	unschedulablePodsChan := make(chan *apiv1.Pod, 1000)
+
 	// Pods that remain unschedulable
 	var unschedulablePods []*apiv1.Pod
-	for _, pod := range unschedulableCandidates {
-		if !scheduledPods[pod.UID] {
-			unschedulablePods = append(unschedulablePods, pod)
+
+	// Worker setup
+	var lock = sync.RWMutex{}
+	var wg sync.WaitGroup
+	//threads := 15
+	wg.Add(workers)
+
+	klog.Infof("brz-log: Spinning up %v workers", workers)
+	for i := 0; i < workers; i++ {
+		go func(workerId int) {
+			findUnschedulablePods(&wg, &lock, workerId, scheduledPods, unschedulableCandidatesChan, unschedulablePodsChan)
+		}(i)
+	}
+
+	// Push all unschedulable pods into channel by looping over slice
+	go func(c chan *apiv1.Pod) {
+		for _, pod := range unschedulableCandidates {
+			unschedulableCandidatesChan <- pod
 		}
+		close(c)
+	}(unschedulableCandidatesChan)
+
+	// Close out channels and wait for workers to complete
+	go func() {
+		wg.Wait()
+		//close(scheduledPodsChan)
+		close(unschedulablePodsChan)
+	}()
+
+	// Loop over chan and push into slice
+	for p := range unschedulablePodsChan {
+		unschedulablePods = append(unschedulablePods, p)
 	}
 
 	metrics.UpdateOverflowingControllers(overflowingControllerCount)
 	klog.V(4).Infof("%v pods marked as unschedulable can be scheduled.", len(unschedulableCandidates)-len(unschedulablePods))
 
 	p.schedulingSimulator.DropOldHints()
+
+	klog.Infof("brz-log: unschedulable pod count: %v", len(unschedulablePods))
 	return unschedulablePods, nil
+}
+
+func findUnschedulablePods(wg *sync.WaitGroup, lock *sync.RWMutex, workerId int, scheduledPods map[types.UID]bool,
+	unschedulableCandidatesChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
+	defer wg.Done()
+
+	for pod := range unschedulableCandidatesChan {
+		lock.RLock()
+		if !scheduledPods[pod.UID] {
+			unschedulablePodsChan <- pod
+		}
+		lock.RUnlock()
+	}
 }
 
 func findSchedulablePods(allUnschedulablePods, podsStillUnschedulable []*apiv1.Pod) []*apiv1.Pod {

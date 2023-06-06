@@ -87,6 +87,7 @@ func multiStringFlag(name string, usage string) *MultiStringFlag {
 }
 
 var (
+	workerThreads           = flag.Int("workers", 5, "number of workers to use for concurrency")
 	clusterName             = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
 	address                 = flag.String("address", ":8085", "The address to expose prometheus metrics.")
 	kubernetes              = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
@@ -243,6 +244,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 			ScaleDownUnneededTime:            *scaleDownUnneededTime,
 			ScaleDownUnreadyTime:             *scaleDownUnreadyTime,
 		},
+		WorkerThrads:                       *workerThreads,
 		CloudConfig:                        *cloudConfig,
 		CloudProviderName:                  *cloudProviderFlag,
 		NodeGroupAutoDiscovery:             *nodeGroupAutoDiscoveryFlag,
