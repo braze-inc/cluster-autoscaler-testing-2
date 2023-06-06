@@ -180,10 +180,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			if skipReason != nil {
 				//skippedNodeGroups[nodeGroup.Id()] = skipReason
 				processedNodeGroupChan <- processedNodeGroup{
-					nodeId:         nodeGroup.Id(),
-					skipReason:     skipReason,
-					err:            nil,
-					expanderOption: expander.Option{},
+					nodeId:     nodeGroup.Id(),
+					skipReason: skipReason,
+					//err:            nil,
+					//expanderOption: expander.Option{},
 				}
 			}
 			continue
@@ -194,10 +194,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			klog.Errorf("Failed to get node group size: %v", err)
 			//skippedNodeGroups[nodeGroup.Id()] = notReadyReason
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:         nodeGroup.Id(),
-				skipReason:     notReadyReason,
-				err:            nil,
-				expanderOption: expander.Option{},
+				nodeId:     nodeGroup.Id(),
+				skipReason: notReadyReason,
+				//err:            nil,
+				//expanderOption: expander.Option{},
 			}
 			continue
 		}
@@ -205,10 +205,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			klog.V(4).Infof("Skipping node group %s - max size reached", nodeGroup.Id())
 			//skippedNodeGroups[nodeGroup.Id()] = maxLimitReachedReason
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:         nodeGroup.Id(),
-				skipReason:     maxLimitReachedReason,
-				err:            nil,
-				expanderOption: expander.Option{},
+				nodeId:     nodeGroup.Id(),
+				skipReason: maxLimitReachedReason,
+				//err:            nil,
+				//expanderOption: expander.Option{},
 			}
 			continue
 		}
@@ -218,10 +218,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			klog.Errorf("No node info for: %s", nodeGroup.Id())
 			//skippedNodeGroups[nodeGroup.Id()] = notReadyReason
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:         nodeGroup.Id(),
-				skipReason:     notReadyReason,
-				err:            nil,
-				expanderOption: expander.Option{},
+				nodeId:     nodeGroup.Id(),
+				skipReason: notReadyReason,
+				//err:            nil,
+				//expanderOption: expander.Option{},
 			}
 			continue
 		}
@@ -230,10 +230,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			if skipReason != nil {
 				//skippedNodeGroups[nodeGroup.Id()] = skipReason
 				processedNodeGroupChan <- processedNodeGroup{
-					nodeId:         nodeGroup.Id(),
-					skipReason:     notReadyReason,
-					err:            nil,
-					expanderOption: expander.Option{},
+					nodeId:     nodeGroup.Id(),
+					skipReason: notReadyReason,
+					//err:            nil,
+					//expanderOption: expander.Option{},
 				}
 			}
 			continue
@@ -243,10 +243,8 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 		option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
 		if err != nil {
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:         nodeGroup.Id(),
-				skipReason:     notReadyReason,
-				err:            err,
-				expanderOption: expander.Option{},
+				nodeId: nodeGroup.Id(),
+				err:    err,
 			}
 			//return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
 		}
