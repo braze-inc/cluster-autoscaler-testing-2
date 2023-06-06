@@ -19,6 +19,7 @@ package core
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"k8s.io/autoscaler/cluster-autoscaler/core/scaleup"
@@ -52,7 +53,7 @@ type processedNodeGroup struct {
 	nodeId         string
 	skipReason     *skippedReasons
 	err            error
-	expanderOption *expander.Option
+	expanderOption expander.Option
 }
 
 func (sr *skippedReasons) Reasons() []string {
@@ -166,10 +167,14 @@ func getCappedNewNodeCount(context *context.AutoscalingContext, newNodeCount, cu
 	return newNodeCount, nil
 }
 
-/*
 // process nodeGroups concurrently
-func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateRegistry *clusterstate.ClusterStateRegistry, t time.Time,
-	processedNodeGroupChan chan processedNodeGroup) {
+func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan cloudprovider.NodeGroup, wg *sync.WaitGroup,
+	mutex *sync.Mutex, processedNodeGroupChan chan processedNodeGroup, clusterStateRegistry *clusterstate.ClusterStateRegistry,
+	t time.Time, nodeInfos map[string]*schedulerframework.NodeInfo, resourcesLeft scaleup.ResourcesLimits,
+	resourceManager *scaleup.ResourceManager, podEquivalenceGroups []*podEquivalenceGroup, upcomingNodes []*schedulerframework.NodeInfo) {
+
+	defer wg.Done()
+
 	for nodeGroup := range nodeGroupChan {
 		if readyToScaleUp, skipReason := isNodeGroupReadyToScaleUp(nodeGroup, clusterStateRegistry, t); !readyToScaleUp {
 			if skipReason != nil {
@@ -178,7 +183,7 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 					nodeId:         nodeGroup.Id(),
 					skipReason:     skipReason,
 					err:            nil,
-					expanderOption: nil,
+					expanderOption: expander.Option{},
 				}
 			}
 			continue
@@ -192,7 +197,7 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 				nodeId:         nodeGroup.Id(),
 				skipReason:     notReadyReason,
 				err:            nil,
-				expanderOption: nil,
+				expanderOption: expander.Option{},
 			}
 			continue
 		}
@@ -203,7 +208,7 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 				nodeId:         nodeGroup.Id(),
 				skipReason:     maxLimitReachedReason,
 				err:            nil,
-				expanderOption: nil,
+				expanderOption: expander.Option{},
 			}
 			continue
 		}
@@ -216,7 +221,7 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 				nodeId:         nodeGroup.Id(),
 				skipReason:     notReadyReason,
 				err:            nil,
-				expanderOption: nil,
+				expanderOption: expander.Option{},
 			}
 			continue
 		}
@@ -228,22 +233,24 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 					nodeId:         nodeGroup.Id(),
 					skipReason:     notReadyReason,
 					err:            nil,
-					expanderOption: nil,
+					expanderOption: expander.Option{},
 				}
 			}
 			continue
 		}
 
+		mutex.Lock()
 		option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
 		if err != nil {
 			processedNodeGroupChan <- processedNodeGroup{
 				nodeId:         nodeGroup.Id(),
 				skipReason:     notReadyReason,
 				err:            err,
-				expanderOption: nil,
+				expanderOption: expander.Option{},
 			}
 			//return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
 		}
+		mutex.Unlock()
 
 		if len(option.Pods) > 0 {
 			if option.NodeCount > 0 {
@@ -251,7 +258,7 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 					nodeId:         nodeGroup.Id(),
 					skipReason:     notReadyReason,
 					err:            err,
-					expanderOption: &option,
+					expanderOption: option,
 				}
 				//expansionOptions[nodeGroup.Id()] = option
 			} else {
@@ -262,7 +269,6 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 		}
 	}
 }
-*/
 
 // ScaleUp tries to scale the cluster up. Return true if it found a way to increase the size,
 // false if it didn't and error if an error occurred. Assumes that all nodes in the cluster are
@@ -270,13 +276,13 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.AutoscalingProcessors, clusterStateRegistry *clusterstate.ClusterStateRegistry, resourceManager *scaleup.ResourceManager, unschedulablePods []*apiv1.Pod,
 	nodes []*apiv1.Node, daemonSets []*appsv1.DaemonSet, nodeInfos map[string]*schedulerframework.NodeInfo, ignoredTaints taints.TaintKeySet) (*status.ScaleUpStatus, errors.AutoscalerError) {
 
-	klog.Info("brz-log: in scale_up.ScaleUp()")
-	klog.Infof("brz-log: number of unschedulablePods: %v\n", len(unschedulablePods))
+	//klog.Info("brz-log: in scale_up.ScaleUp()")
+	//klog.Infof("brz-log: number of unschedulablePods: %v\n", len(unschedulablePods))
 
-	klog.Infof("gol-zrb: pods to process in ScaleUp(): %d", len(unschedulablePods))
-	for _, p := range unschedulablePods {
-		klog.Infof("gol-zrb: p: %v\n", p.Name)
-	}
+	//klog.Infof("gol-zrb: pods to process in ScaleUp(): %d", len(unschedulablePods))
+	//for _, p := range unschedulablePods {
+	//	klog.Infof("gol-zrb: p: %v\n", p.Name)
+	//}
 
 	// From now on we only care about unschedulable pods that were marked after the newest
 	// node became available for the scheduler.
@@ -291,11 +297,11 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 	}
 	klogx.V(1).Over(loggingQuota).Infof("%v other pods are also unschedulable", -loggingQuota.Left())
 	podEquivalenceGroups := buildPodEquivalenceGroups(unschedulablePods)
-	for _, p := range podEquivalenceGroups {
-		for _, _p := range p.pods {
-			klog.Infof("gol-zrb: p.pod in podEquGrp: %v\n", _p.Name)
-		}
-	}
+	//for _, p := range podEquivalenceGroups {
+	//	for _, _p := range p.pods {
+	//		klog.Infof("gol-zrb: p.pod in podEquGrp: %v\n", _p.Name)
+	//	}
+	//}
 
 	upcomingNodes := make([]*schedulerframework.NodeInfo, 0)
 	for nodeGroup, numberOfNodes := range clusterStateRegistry.GetUpcomingNodes() {
@@ -313,7 +319,7 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 	klog.V(4).Infof("Upcoming %d nodes", len(upcomingNodes))
 
 	nodeGroups := context.CloudProvider.NodeGroups()
-	klog.Infof("brz-log: number of node groups: %v\n", len(nodeGroups))
+	//klog.Infof("brz-log: number of node groups: %v\n", len(nodeGroups))
 
 	if processors != nil && processors.NodeGroupListProcessor != nil {
 		var errProc error
@@ -332,9 +338,22 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 	gpuLabel := context.CloudProvider.GPULabel()
 	availableGPUTypes := context.CloudProvider.GetAvailableGPUTypes()
 	expansionOptions := make(map[string]expander.Option, 0)
+	//expansionOptions2 := make(map[string]expander.Option, 0)
 	skippedNodeGroups := map[string]status.Reasons{}
 
-	nodeGroupChan := make(chan cloudprovider.NodeGroup)
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(5)
+
+	nodeGroupChan := make(chan cloudprovider.NodeGroup, 25)
+	processedGroupChan := make(chan processedNodeGroup, 25)
+
+	go func() {
+		for i := 0; i < 5; i++ {
+			go processNodeGroups(context, nodeGroupChan, &wg, &mutex, processedGroupChan, clusterStateRegistry, now, nodeInfos, resourcesLeft, resourceManager, podEquivalenceGroups, upcomingNodes)
+		}
+	}()
+
 	go func(c chan cloudprovider.NodeGroup) {
 		for _, nodeGroup := range nodeGroups {
 			c <- nodeGroup
@@ -342,55 +361,72 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 		close(c)
 	}(nodeGroupChan)
 
-	for _, nodeGroup := range nodeGroups {
-		if readyToScaleUp, skipReason := isNodeGroupReadyToScaleUp(nodeGroup, clusterStateRegistry, now); !readyToScaleUp {
-			if skipReason != nil {
-				skippedNodeGroups[nodeGroup.Id()] = skipReason
+	go func() {
+		wg.Wait()
+		close(processedGroupChan)
+	}()
+
+	for o := range processedGroupChan {
+		//expansionOptions2[o.nodeId] = o.expanderOption
+		expansionOptions[o.nodeId] = o.expanderOption
+	}
+
+	//for k, v := range expansionOptions2 {
+	for k, v := range expansionOptions {
+		klog.Infof("exop2 k, v, nodecount: %v => %v => %v\n", k, v.NodeGroup.Id(), v.NodeCount)
+	}
+
+	/*
+		for _, nodeGroup := range nodeGroups {
+			if readyToScaleUp, skipReason := isNodeGroupReadyToScaleUp(nodeGroup, clusterStateRegistry, now); !readyToScaleUp {
+				if skipReason != nil {
+					skippedNodeGroups[nodeGroup.Id()] = skipReason
+				}
+				continue
 			}
-			continue
-		}
 
-		currentTargetSize, err := nodeGroup.TargetSize()
-		if err != nil {
-			klog.Errorf("Failed to get node group size: %v", err)
-			skippedNodeGroups[nodeGroup.Id()] = notReadyReason
-			continue
-		}
-		if currentTargetSize >= nodeGroup.MaxSize() {
-			klog.V(4).Infof("Skipping node group %s - max size reached", nodeGroup.Id())
-			skippedNodeGroups[nodeGroup.Id()] = maxLimitReachedReason
-			continue
-		}
-
-		nodeInfo, found := nodeInfos[nodeGroup.Id()]
-		if !found {
-			klog.Errorf("No node info for: %s", nodeGroup.Id())
-			skippedNodeGroups[nodeGroup.Id()] = notReadyReason
-			continue
-		}
-
-		if exceeded, skipReason := isNodeGroupResourceExceeded(context, resourceManager, resourcesLeft, nodeGroup, nodeInfo); exceeded {
-			if skipReason != nil {
-				skippedNodeGroups[nodeGroup.Id()] = skipReason
+			currentTargetSize, err := nodeGroup.TargetSize()
+			if err != nil {
+				klog.Errorf("Failed to get node group size: %v", err)
+				skippedNodeGroups[nodeGroup.Id()] = notReadyReason
+				continue
 			}
-			continue
-		}
+			if currentTargetSize >= nodeGroup.MaxSize() {
+				klog.V(4).Infof("Skipping node group %s - max size reached", nodeGroup.Id())
+				skippedNodeGroups[nodeGroup.Id()] = maxLimitReachedReason
+				continue
+			}
 
-		option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
-		if err != nil {
-			return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
-		}
+			nodeInfo, found := nodeInfos[nodeGroup.Id()]
+			if !found {
+				klog.Errorf("No node info for: %s", nodeGroup.Id())
+				skippedNodeGroups[nodeGroup.Id()] = notReadyReason
+				continue
+			}
 
-		if len(option.Pods) > 0 {
-			if option.NodeCount > 0 {
-				expansionOptions[nodeGroup.Id()] = option
+			if exceeded, skipReason := isNodeGroupResourceExceeded(context, resourceManager, resourcesLeft, nodeGroup, nodeInfo); exceeded {
+				if skipReason != nil {
+					skippedNodeGroups[nodeGroup.Id()] = skipReason
+				}
+				continue
+			}
+
+			option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
+			if err != nil {
+				return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
+			}
+
+			if len(option.Pods) > 0 {
+				if option.NodeCount > 0 {
+					expansionOptions[nodeGroup.Id()] = option
+				} else {
+					klog.V(4).Infof("No pod can fit to %s", nodeGroup.Id())
+				}
 			} else {
 				klog.V(4).Infof("No pod can fit to %s", nodeGroup.Id())
 			}
-		} else {
-			klog.V(4).Infof("No pod can fit to %s", nodeGroup.Id())
 		}
-	}
+	*/
 
 	if len(expansionOptions) == 0 {
 		klog.V(1).Info("No expansion options")
@@ -413,7 +449,7 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 		if len(bestOption.Debug) > 0 {
 			klog.V(1).Info(bestOption.Debug)
 		}
-		klog.Infof("brz-log: %d nodes needed in node group %s", bestOption.NodeCount, bestOption.NodeGroup.Id())
+		//klog.Infof("brz-log: %d nodes needed in node group %s", bestOption.NodeCount, bestOption.NodeGroup.Id())
 		klog.V(1).Infof("Estimated %d nodes needed in %s", bestOption.NodeCount, bestOption.NodeGroup.Id())
 
 		newNodes := bestOption.NodeCount
@@ -475,9 +511,9 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 			clusterStateRegistry.Recalculate()
 		}
 
-		klog.Info("brz-log: checking if node exists in nodeInfos map...")
+		//klog.Info("brz-log: checking if node exists in nodeInfos map...")
 		nodeInfo, found := nodeInfos[bestOption.NodeGroup.Id()]
-		klog.Infof("brz-log: %s exists: %v\n", bestOption.NodeGroup.Id(), found)
+		//klog.Infof("brz-log: %s exists: %v\n", bestOption.NodeGroup.Id(), found)
 		if !found {
 			// This should never happen, as we already should have retrieved
 			// nodeInfo for any considered nodegroup.
@@ -490,9 +526,9 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 		}
 
 		// apply upper limits for CPU and memory
-		klog.Info("brz-log: applying resource limits to nodes")
+		//klog.Info("brz-log: applying resource limits to nodes")
 		newNodes, err = resourceManager.ApplyResourcesLimits(context, newNodes, resourcesLeft, nodeInfo, bestOption.NodeGroup)
-		klog.Infof("brz-log: number of newNodes after resource application: %d\n", newNodes)
+		//klog.Infof("brz-log: number of newNodes after resource application: %d\n", newNodes)
 		if err != nil {
 			return scaleUpError(
 				&status.ScaleUpStatus{CreateNodeGroupResults: createNodeGroupResults, PodsTriggeredScaleUp: bestOption.Pods},
@@ -501,8 +537,8 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 
 		targetNodeGroups := []cloudprovider.NodeGroup{bestOption.NodeGroup}
 		if context.BalanceSimilarNodeGroups {
-			klog.Info("brz-log: context.BalanceSimilarNodeGroups is %v", context.BalanceSimilarNodeGroups)
-			klog.Info("calculating similar node groups...")
+			//klog.Info("brz-log: context.BalanceSimilarNodeGroups is %v", context.BalanceSimilarNodeGroups)
+			//klog.Info("calculating similar node groups...")
 			similarNodeGroups, typedErr := processors.NodeGroupSetProcessor.FindSimilarNodeGroups(context, bestOption.NodeGroup, nodeInfos)
 			if typedErr != nil {
 				return scaleUpError(
@@ -510,9 +546,9 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 					typedErr.AddPrefix("failed to find matching node groups: "))
 			}
 
-			klog.Infof("brz-log: calling filterNodeGroupsByPods(), similarNodeGroups count: %d\n", len(similarNodeGroups))
+			//klog.Infof("brz-log: calling filterNodeGroupsByPods(), similarNodeGroups count: %d\n", len(similarNodeGroups))
 			similarNodeGroups = filterNodeGroupsByPods(similarNodeGroups, bestOption.Pods, expansionOptions)
-			klog.Infof("brz-log: after filterNodeGroupsByPods(), similarNodeGroups count: %d\n", len(similarNodeGroups))
+			//klog.Infof("brz-log: after filterNodeGroupsByPods(), similarNodeGroups count: %d\n", len(similarNodeGroups))
 			for _, ng := range similarNodeGroups {
 				if clusterStateRegistry.IsNodeGroupSafeToScaleUp(ng, now) {
 					targetNodeGroups = append(targetNodeGroups, ng)
@@ -541,7 +577,7 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 				typedErr)
 		}
 
-		klog.Info("brz-log: done calculating scaleup plan...")
+		//klog.Info("brz-log: done calculating scaleup plan...")
 		klog.V(1).Infof("Final scale-up plan: %v", scaleUpInfos)
 		for _, info := range scaleUpInfos {
 			typedErr := executeScaleUp(context, clusterStateRegistry, info, gpu.GetGpuTypeForMetrics(gpuLabel, availableGPUTypes, nodeInfo.Node(), nil), now)
