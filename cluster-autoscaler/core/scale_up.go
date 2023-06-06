@@ -166,6 +166,7 @@ func getCappedNewNodeCount(context *context.AutoscalingContext, newNodeCount, cu
 	return newNodeCount, nil
 }
 
+/*
 // process nodeGroups concurrently
 func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateRegistry *clusterstate.ClusterStateRegistry, t time.Time,
 	processedNodeGroupChan chan processedNodeGroup) {
@@ -261,6 +262,7 @@ func processNodeGroups(nodeGroupChan chan cloudprovider.NodeGroup, clusterStateR
 		}
 	}
 }
+*/
 
 // ScaleUp tries to scale the cluster up. Return true if it found a way to increase the size,
 // false if it didn't and error if an error occurred. Assumes that all nodes in the cluster are
@@ -411,7 +413,7 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 		if len(bestOption.Debug) > 0 {
 			klog.V(1).Info(bestOption.Debug)
 		}
-		klog.Infof("brz-log: %d nodes needed in node group %s ", bestOption.NodeCount, bestOption.NodeGroup.Id())
+		klog.Infof("brz-log: %d nodes needed in node group %s", bestOption.NodeCount, bestOption.NodeGroup.Id())
 		klog.V(1).Infof("Estimated %d nodes needed in %s", bestOption.NodeCount, bestOption.NodeGroup.Id())
 
 		newNodes := bestOption.NodeCount
