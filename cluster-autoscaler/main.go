@@ -471,9 +471,6 @@ func run(healthCheck *metrics.HealthCheck, debuggingSnapshotter debuggingsnapsho
 
 func main() {
 	// Init Datadog tracer
-	tracer.Start()
-	defer tracer.Stop()
-
 	klog.InitFlags(nil)
 
 	leaderElection := defaultLeaderElectionConfiguration()
