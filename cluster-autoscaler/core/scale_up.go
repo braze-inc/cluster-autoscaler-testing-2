@@ -53,7 +53,7 @@ type processedNodeGroup struct {
 	nodeId         string
 	skipReason     *skippedReasons
 	err            error
-	expanderOption expander.Option
+	expanderOption *expander.Option
 }
 
 func (sr *skippedReasons) Reasons() []string {
@@ -180,10 +180,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			if skipReason != nil {
 				//skippedNodeGroups[nodeGroup.Id()] = skipReason
 				processedNodeGroupChan <- processedNodeGroup{
-					nodeId:     nodeGroup.Id(),
-					skipReason: skipReason,
-					//err:            nil,
-					//expanderOption: expander.Option{},
+					nodeId:         nodeGroup.Id(),
+					skipReason:     skipReason,
+					err:            nil,
+					expanderOption: nil,
 				}
 			}
 			continue
@@ -194,10 +194,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			klog.Errorf("Failed to get node group size: %v", err)
 			//skippedNodeGroups[nodeGroup.Id()] = notReadyReason
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:     nodeGroup.Id(),
-				skipReason: notReadyReason,
-				//err:            nil,
-				//expanderOption: expander.Option{},
+				nodeId:         nodeGroup.Id(),
+				skipReason:     notReadyReason,
+				err:            nil,
+				expanderOption: nil,
 			}
 			continue
 		}
@@ -205,10 +205,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			klog.V(4).Infof("Skipping node group %s - max size reached", nodeGroup.Id())
 			//skippedNodeGroups[nodeGroup.Id()] = maxLimitReachedReason
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:     nodeGroup.Id(),
-				skipReason: maxLimitReachedReason,
-				//err:            nil,
-				//expanderOption: expander.Option{},
+				nodeId:         nodeGroup.Id(),
+				skipReason:     maxLimitReachedReason,
+				err:            nil,
+				expanderOption: nil,
 			}
 			continue
 		}
@@ -218,10 +218,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			klog.Errorf("No node info for: %s", nodeGroup.Id())
 			//skippedNodeGroups[nodeGroup.Id()] = notReadyReason
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId:     nodeGroup.Id(),
-				skipReason: notReadyReason,
-				//err:            nil,
-				//expanderOption: expander.Option{},
+				nodeId:         nodeGroup.Id(),
+				skipReason:     notReadyReason,
+				err:            nil,
+				expanderOption: nil,
 			}
 			continue
 		}
@@ -230,10 +230,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			if skipReason != nil {
 				//skippedNodeGroups[nodeGroup.Id()] = skipReason
 				processedNodeGroupChan <- processedNodeGroup{
-					nodeId:     nodeGroup.Id(),
-					skipReason: notReadyReason,
-					//err:            nil,
-					//expanderOption: expander.Option{},
+					nodeId:         nodeGroup.Id(),
+					skipReason:     notReadyReason,
+					err:            nil,
+					expanderOption: nil,
 				}
 			}
 			continue
@@ -243,8 +243,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 		option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
 		if err != nil {
 			processedNodeGroupChan <- processedNodeGroup{
-				nodeId: nodeGroup.Id(),
-				err:    err,
+				nodeId:         nodeGroup.Id(),
+				err:            err,
+				skipReason:     nil,
+				expanderOption: nil,
 			}
 			//return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
 		}
@@ -256,7 +258,7 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 					nodeId:         nodeGroup.Id(),
 					skipReason:     notReadyReason,
 					err:            err,
-					expanderOption: option,
+					expanderOption: &option,
 				}
 				//expansionOptions[nodeGroup.Id()] = option
 			} else {
@@ -366,7 +368,15 @@ func ScaleUp(context *context.AutoscalingContext, processors *ca_processors.Auto
 
 	for o := range processedGroupChan {
 		//expansionOptions2[o.nodeId] = o.expanderOption
-		expansionOptions[o.nodeId] = o.expanderOption
+		if o.err != nil {
+			return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
+		}
+		if o.expanderOption != nil {
+			expansionOptions[o.nodeId] = *o.expanderOption
+		}
+		if o.skipReason != nil {
+			skippedNodeGroups[o.nodeId] = o.skipReason
+		}
 	}
 
 	//for k, v := range expansionOptions2 {
