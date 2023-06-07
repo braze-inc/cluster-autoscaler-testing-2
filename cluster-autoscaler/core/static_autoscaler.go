@@ -548,13 +548,13 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		klog.V(1).Info("Unschedulable pods are very new, waiting one iteration for more")
 	} else {
 		// Start child span for metrics.ScaleUp
-		spanScaleUp, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleUp))
+		spanScaleUp, sctx := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleUp))
 		scaleUpStart := preScaleUp()
 		//klog.Info("brz-log: calling ScaleUp()")
-		scaleUpStatus, typedErr = ScaleUp(autoscalingContext, a.processors, a.clusterStateRegistry, a.scaleUpResourceManager, unschedulablePodsToHelp, readyNodes, daemonsets, nodeInfosForGroups, a.ignoredTaints)
+		scaleUpStatus, typedErr = ScaleUp(sctx, autoscalingContext, a.processors, a.clusterStateRegistry, a.scaleUpResourceManager, unschedulablePodsToHelp, readyNodes, daemonsets, nodeInfosForGroups, a.ignoredTaints)
 		if exit, err := postScaleUp(scaleUpStart); exit {
 			// Finish child span for metrics.ScaleUp
-			spanScaleUp.Finish()
+			spanScaleUp.Finish(tracer.WithError(err))
 			return err
 		}
 		// Finish child span for metrics.ScaleUp
