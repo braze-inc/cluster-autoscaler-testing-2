@@ -64,7 +64,7 @@ func (p *filterOutSchedulablePodListProcessor) Process(context *context.Autoscal
 	klog.V(4).Infof("Filtering out schedulables")
 	filterOutSchedulableStart := time.Now()
 
-	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot, context.WorkerThrads)
+	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot, context.WorkerThreads)
 
 	if err != nil {
 		return nil, err

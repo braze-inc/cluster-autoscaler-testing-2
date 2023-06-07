@@ -76,7 +76,7 @@ func (p *MixedTemplateNodeInfoProvider) Process(ctx *context.AutoscalingContext,
 	result := make(map[string]*schedulerframework.NodeInfo)
 	seenGroups := make(map[string]bool)
 
-	podsForNodes, err := getPodsForNodes(ctx.ListerRegistry, ctx.WorkerThrads)
+	podsForNodes, err := getPodsForNodes(ctx.ListerRegistry, ctx.WorkerThreads)
 	if err != nil {
 		return map[string]*schedulerframework.NodeInfo{}, err
 	}

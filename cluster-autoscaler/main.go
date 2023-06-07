@@ -246,7 +246,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 			ScaleDownUnneededTime:            *scaleDownUnneededTime,
 			ScaleDownUnreadyTime:             *scaleDownUnreadyTime,
 		},
-		WorkerThrads:                       *workerThreads,
+		WorkerThreads:                      *workerThreads,
 		CloudConfig:                        *cloudConfig,
 		CloudProviderName:                  *cloudProviderFlag,
 		NodeGroupAutoDiscovery:             *nodeGroupAutoDiscoveryFlag,

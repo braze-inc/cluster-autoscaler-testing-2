@@ -256,8 +256,8 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			if option.NodeCount > 0 {
 				processedNodeGroupChan <- processedNodeGroup{
 					nodeId:         nodeGroup.Id(),
-					skipReason:     notReadyReason,
-					err:            err,
+					skipReason:     nil,
+					err:            nil,
 					expanderOption: &option,
 				}
 				//expansionOptions[nodeGroup.Id()] = option
