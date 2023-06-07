@@ -214,5 +214,5 @@ type AutoscalingOptions struct {
 	// ParallelDrain is whether CA can drain nodes in parallel.
 	ParallelDrain bool
 	// Number of workers to use for concurrency
-	WorkerThrads int
+	WorkerThreads int
 }

@@ -64,7 +64,7 @@ func (p *filterOutSchedulablePodListProcessor) Process(context *context.Autoscal
 	klog.V(4).Infof("Filtering out schedulables")
 	filterOutSchedulableStart := time.Now()
 
-	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot, context.WorkerThrads)
+	unschedulablePodsToHelp, err := p.filterOutSchedulableByPacking(unschedulablePods, context.ClusterSnapshot, context.WorkerThreads)
 
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 	//threads := 15
 	wg.Add(workers)
 
-	klog.Infof("brz-log: Spinning up %v workers", workers)
+	//klog.Infof("brz-log: Spinning up %v workers", workers)
 	for i := 0; i < workers; i++ {
 		go func(workerId int) {
 			findUnschedulablePods(&wg, &lock, workerId, scheduledPods, unschedulableCandidatesChan, unschedulablePodsChan)
@@ -154,7 +154,7 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 
 	p.schedulingSimulator.DropOldHints()
 
-	klog.Infof("brz-log: unschedulable pod count: %v", len(unschedulablePods))
+	//klog.Infof("brz-log: unschedulable pod count: %v", len(unschedulablePods))
 	return unschedulablePods, nil
 }
 

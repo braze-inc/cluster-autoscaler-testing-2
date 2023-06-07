@@ -251,7 +251,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 			ScaleDownUnneededTime:            *scaleDownUnneededTime,
 			ScaleDownUnreadyTime:             *scaleDownUnreadyTime,
 		},
-		WorkerThrads:                       *workerThreads,
+		WorkerThreads:                      *workerThreads,
 		CloudConfig:                        *cloudConfig,
 		CloudProviderName:                  *cloudProviderFlag,
 		NodeGroupAutoDiscovery:             *nodeGroupAutoDiscoveryFlag,
@@ -470,6 +470,10 @@ func run(healthCheck *metrics.HealthCheck, debuggingSnapshotter debuggingsnapsho
 }
 
 func main() {
+	// Init Datadog tracer
+	tracer.Start()
+	defer tracer.Stop()
+
 	klog.InitFlags(nil)
 
 	leaderElection := defaultLeaderElectionConfiguration()

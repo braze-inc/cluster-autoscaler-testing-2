@@ -269,7 +269,7 @@ func (a *StaticAutoscaler) initializeClusterSnapshot(nodes []*apiv1.Node, schedu
 
 // RunOnce iterates over node groups and scales them up/down if necessary
 func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError {
-	klog.Info("brz-log: entering RunOne()")
+	//klog.Info("brz-log: entering RunOne()")
 	a.cleanUpIfRequired()
 	a.processorCallbacks.reset()
 	a.clusterStateRegistry.PeriodicCleanup()
@@ -301,7 +301,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		klog.Errorf("Failed to get node list: %v", typedErr)
 		return typedErr
 	}
-	originalScheduledPods, err := scheduledPodLister.List(a.WorkerThrads)
+	originalScheduledPods, err := scheduledPodLister.List(a.WorkerThreads)
 	if err != nil {
 		klog.Errorf("Failed to list scheduled pods: %v", err)
 		return errors.ToAutoscalerError(errors.ApiCallError, err)
@@ -451,7 +451,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 
 	metrics.UpdateLastTime(metrics.Autoscaling, time.Now())
 
-	unschedulablePods, err := unschedulablePodLister.List(a.WorkerThrads)
+	unschedulablePods, err := unschedulablePodLister.List(a.WorkerThreads)
 	if err != nil {
 		klog.Errorf("Failed to list unscheduled pods: %v", err)
 		return errors.ToAutoscalerError(errors.ApiCallError, err)
@@ -550,7 +550,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		// Start child span for metrics.ScaleUp
 		spanScaleUp, _ := tracer.StartSpanFromContext(a.TracingContext, string(metrics.ScaleUp))
 		scaleUpStart := preScaleUp()
-		klog.Info("brz-log: calling ScaleUp()")
+		//klog.Info("brz-log: calling ScaleUp()")
 		scaleUpStatus, typedErr = ScaleUp(autoscalingContext, a.processors, a.clusterStateRegistry, a.scaleUpResourceManager, unschedulablePodsToHelp, readyNodes, daemonsets, nodeInfosForGroups, a.ignoredTaints)
 		if exit, err := postScaleUp(scaleUpStart); exit {
 			// Finish child span for metrics.ScaleUp
@@ -705,7 +705,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		}
 	}
 
-	klog.Info("brz-log: RunOnce() completed")
+	//klog.Info("brz-log: RunOnce() completed")
 	return nil
 }
 

@@ -32,7 +32,6 @@ import (
 	v1lister "k8s.io/client-go/listers/core/v1"
 	v1policylister "k8s.io/client-go/listers/policy/v1"
 	"k8s.io/client-go/tools/cache"
-	klog "k8s.io/klog/v2"
 	podv1 "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
@@ -194,7 +193,7 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 	var wg sync.WaitGroup
 	wg.Add(workers)
 
-	klog.Infof("brz-log: Spinning up %v workers", workers)
+	//klog.Infof("brz-log: Spinning up %v workers", workers)
 	for i := 0; i < workers; i++ {
 		go listScheduledAndUnschedulablePods(&wg, i, podsChan, unschedulablePodsChan)
 	}
@@ -216,7 +215,7 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 		_unschedulablePods = append(_unschedulablePods, p)
 	}
 
-	klog.Infof("brz-log: unscheduled pod count: %v", len(_unschedulablePods))
+	//klog.Infof("brz-log: unscheduled pod count: %v", len(_unschedulablePods))
 	return _unschedulablePods, nil
 }
 

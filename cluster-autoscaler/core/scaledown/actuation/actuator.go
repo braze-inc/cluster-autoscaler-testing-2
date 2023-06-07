@@ -372,7 +372,7 @@ func (a *Actuator) createSnapshot(nodes []*apiv1.Node) (clustersnapshot.ClusterS
 	knownNodes := make(map[string]bool)
 	snapshot := clustersnapshot.NewBasicClusterSnapshot()
 
-	scheduledPods, err := a.ctx.ScheduledPodLister().List(a.ctx.WorkerThrads)
+	scheduledPods, err := a.ctx.ScheduledPodLister().List(a.ctx.WorkerThreads)
 	if err != nil {
 		return nil, err
 	}
