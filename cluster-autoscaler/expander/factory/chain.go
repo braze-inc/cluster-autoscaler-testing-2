@@ -18,6 +18,7 @@ package factory
 
 import (
 	"k8s.io/autoscaler/cluster-autoscaler/expander"
+	"k8s.io/klog/v2"
 
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
@@ -35,9 +36,15 @@ func newChainStrategy(filters []expander.Filter, fallback expander.Strategy) exp
 }
 
 func (c *chainStrategy) BestOption(options []expander.Option, nodeInfo map[string]*schedulerframework.NodeInfo) *expander.Option {
+	klog.Info("brz-log: expander strategy: chain")
 	filteredOptions := options
 	for _, filter := range c.filters {
+		klog.Infof("brz-log: filter: %v, %T", filter, filter)
 		filteredOptions = filter.BestOptions(filteredOptions, nodeInfo)
+		for _, f := range filteredOptions {
+			klog.Infof("brz-log: filteredOptions: %#v\n", f.NodeGroup.Id())
+			klog.Infof("brz-log: filteredOptions: %#v\n", f.NodeCount)
+		}
 		if len(filteredOptions) == 1 {
 			return &filteredOptions[0]
 		}

@@ -74,12 +74,45 @@ func maxResourceLimitReached(resources []string) *skippedReasons {
 }
 
 func computeExpansionOption(context *context.AutoscalingContext, podEquivalenceGroups []*podEquivalenceGroup, nodeGroup cloudprovider.NodeGroup, nodeInfo *schedulerframework.NodeInfo, upcomingNodes []*schedulerframework.NodeInfo) (expander.Option, error) {
+	//func computeExpansionOption(context *context.AutoscalingContext, podEquivalenceGroups []*podEquivalenceGroup, nodeGroup cloudprovider.NodeGroup, nodeInfo []*schedulerframework.NodeInfo, upcomingNodes []*schedulerframework.NodeInfo) (expander.Option, error) {
 	option := expander.Option{
 		NodeGroup: nodeGroup,
 		Pods:      make([]*apiv1.Pod, 0),
 	}
 
+	// options := make([]expander.Option, 0)
+
 	context.ClusterSnapshot.Fork()
+
+	//	for _, nInfo := range nodeInfo {
+	//		var pods []*apiv1.Pod
+	//		var option expander.Option
+	//		for _, podInfo := range nInfo.Pods {
+	//			pods = append(pods, podInfo.Pod)
+	//		}
+	//	if err := context.ClusterSnapshot.AddNodeWithPods(nInfo.Node(), pods); err != nil {
+	//		klog.Errorf("Error while adding test Node; %v", err)
+	//		context.ClusterSnapshot.Revert()
+	// TODO: Or should I just skip the node group?
+	//		return expander.Option{}, nil
+	//	}
+	//	for _, eg := range podEquivalenceGroups {
+	//		samplePod := eg.pods[0]
+	//		if err := context.PredicateChecker.CheckPredicates(context.ClusterSnapshot, samplePod, nInfo.Node().Name); err == nil {
+	//			// add pods to option
+	//			option.Pods = append(option.Pods, eg.pods...)
+	//			// mark pod group as (theoretically) schedulable
+	//			eg.schedulable = true
+	//			options = append(options, option)
+	//		} else {
+	//			klog.V(2).Infof("Pod %s can't be scheduled on %s, predicate checking error: %v", samplePod.Name, nodeGroup.Id(), err.VerboseMessage())
+	//			if podCount := len(eg.pods); podCount > 1 {
+	//				klog.V(2).Infof("%d other pods similar to %s can't be scheduled on %s", podCount-1, samplePod.Name, nodeGroup.Id())
+	//			}
+	//			eg.schedulingErrors[nodeGroup.Id()] = err
+	//		}
+	//	}
+	//	}
 
 	// add test node to snapshot
 	var pods []*apiv1.Pod
@@ -111,11 +144,19 @@ func computeExpansionOption(context *context.AutoscalingContext, podEquivalenceG
 
 	context.ClusterSnapshot.Revert()
 
+	// for _, _option := range options {
+	// if len(_option.Pods > 0) {
+	//estimator := context.EstimatorBuilder(context.PredicateChecker, context.ClusterSnapshot)
+	//_option.NodeCount, _option.Pods = estimator.Estimate(_option.Pods, nInfo, _option.NodeGroup)
+	//	}
+	//	}
+
 	if len(option.Pods) > 0 {
 		estimator := context.EstimatorBuilder(context.PredicateChecker, context.ClusterSnapshot)
 		option.NodeCount, option.Pods = estimator.Estimate(option.Pods, nodeInfo, option.NodeGroup)
 	}
 
+	//return options, nil
 	return option, nil
 }
 
@@ -177,6 +218,7 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 	resourceManager *scaleup.ResourceManager, podEquivalenceGroups []*podEquivalenceGroup, upcomingNodes []*schedulerframework.NodeInfo) {
 
 	defer wg.Done()
+	_nodeInfo := make([]*schedulerframework.NodeInfo, 0)
 
 	for nodeGroup := range nodeGroupChan {
 		if readyToScaleUp, skipReason := isNodeGroupReadyToScaleUp(nodeGroup, clusterStateRegistry, t); !readyToScaleUp {
@@ -190,6 +232,10 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 			}
 			continue
 		}
+
+		mutex.Lock()
+		_nodeInfo = append(_nodeInfo, nodeInfos[nodeGroup.Id()])
+		mutex.Unlock()
 
 		currentTargetSize, err := nodeGroup.TargetSize()
 		if err != nil {
@@ -238,6 +284,7 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 		}
 
 		mutex.Lock()
+		//option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, _nodeInfo, upcomingNodes)
 		option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
 		if err != nil {
 			processedNodeGroupChan <- processedNodeGroup{
@@ -391,61 +438,9 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	spanScaleUpProcessNodeGroups.Finish()
 
 	//for k, v := range expansionOptions2 {
-	for k, v := range expansionOptions {
-		klog.Infof("exop2 k, v, nodecount: %v => %v => %v\n", k, v.NodeGroup.Id(), v.NodeCount)
+	for _, v := range expansionOptions {
+		klog.Infof("exop2 nodeId, pods: %v => %v\n", v.NodeGroup.Id(), len(v.Pods))
 	}
-
-	/*
-		for _, nodeGroup := range nodeGroups {
-			if readyToScaleUp, skipReason := isNodeGroupReadyToScaleUp(nodeGroup, clusterStateRegistry, now); !readyToScaleUp {
-				if skipReason != nil {
-					skippedNodeGroups[nodeGroup.Id()] = skipReason
-				}
-				continue
-			}
-
-			currentTargetSize, err := nodeGroup.TargetSize()
-			if err != nil {
-				klog.Errorf("Failed to get node group size: %v", err)
-				skippedNodeGroups[nodeGroup.Id()] = notReadyReason
-				continue
-			}
-			if currentTargetSize >= nodeGroup.MaxSize() {
-				klog.V(4).Infof("Skipping node group %s - max size reached", nodeGroup.Id())
-				skippedNodeGroups[nodeGroup.Id()] = maxLimitReachedReason
-				continue
-			}
-
-			nodeInfo, found := nodeInfos[nodeGroup.Id()]
-			if !found {
-				klog.Errorf("No node info for: %s", nodeGroup.Id())
-				skippedNodeGroups[nodeGroup.Id()] = notReadyReason
-				continue
-			}
-
-			if exceeded, skipReason := isNodeGroupResourceExceeded(context, resourceManager, resourcesLeft, nodeGroup, nodeInfo); exceeded {
-				if skipReason != nil {
-					skippedNodeGroups[nodeGroup.Id()] = skipReason
-				}
-				continue
-			}
-
-			option, err := computeExpansionOption(context, podEquivalenceGroups, nodeGroup, nodeInfo, upcomingNodes)
-			if err != nil {
-				return scaleUpError(&status.ScaleUpStatus{}, errors.ToAutoscalerError(errors.InternalError, err))
-			}
-
-			if len(option.Pods) > 0 {
-				if option.NodeCount > 0 {
-					expansionOptions[nodeGroup.Id()] = option
-				} else {
-					klog.V(4).Infof("No pod can fit to %s", nodeGroup.Id())
-				}
-			} else {
-				klog.V(4).Infof("No pod can fit to %s", nodeGroup.Id())
-			}
-		}
-	*/
 
 	if len(expansionOptions) == 0 {
 		klog.V(1).Info("No expansion options")
@@ -461,6 +456,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	for _, o := range expansionOptions {
 		options = append(options, o)
 	}
+	klog.Infof("expanderStrategy type: %T", context.ExpanderStrategy)
 	// Start child span for scaleup.pickBestOption
 	spanScaleUpPickBestOption, _ := tracer.StartSpanFromContext(sctx, "scaleup.pickBestOption")
 	bestOption := context.ExpanderStrategy.BestOption(options, nodeInfos)
@@ -584,8 +580,6 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		if context.BalanceSimilarNodeGroups {
 			// Start child span for scaleup.balanceSimilarNodeGroups
 			spanScaleUpBalanceSimilarNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.balanceSimilarNodeGroups")
-			//klog.Info("brz-log: context.BalanceSimilarNodeGroups is %v", context.BalanceSimilarNodeGroups)
-			//klog.Info("calculating similar node groups...")
 			klog.Infof("brz-log: nodeGroupSetProcessor type: %T\n", processors.NodeGroupSetProcessor)
 			similarNodeGroups, typedErr := processors.NodeGroupSetProcessor.FindSimilarNodeGroups(context, bestOption.NodeGroup, nodeInfos)
 			if typedErr != nil {
@@ -596,9 +590,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 					typedErr.AddPrefix("failed to find matching node groups: "))
 			}
 
-			//klog.Infof("brz-log: calling filterNodeGroupsByPods(), similarNodeGroups count: %d\n", len(similarNodeGroups))
 			similarNodeGroups = filterNodeGroupsByPods(similarNodeGroups, bestOption.Pods, expansionOptions)
-			//klog.Infof("brz-log: after filterNodeGroupsByPods(), similarNodeGroups count: %d\n", len(similarNodeGroups))
 			for _, ng := range similarNodeGroups {
 				if clusterStateRegistry.IsNodeGroupSafeToScaleUp(ng, now) {
 					targetNodeGroups = append(targetNodeGroups, ng)

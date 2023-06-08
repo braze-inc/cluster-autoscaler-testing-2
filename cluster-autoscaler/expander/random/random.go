@@ -20,6 +20,7 @@ import (
 	"math/rand"
 
 	"k8s.io/autoscaler/cluster-autoscaler/expander"
+	"k8s.io/klog/v2"
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
@@ -47,10 +48,13 @@ func (r *random) BestOptions(expansionOptions []expander.Option, nodeInfo map[st
 
 // BestOption selects from the expansion options at random
 func (r *random) BestOption(expansionOptions []expander.Option, nodeInfo map[string]*schedulerframework.NodeInfo) *expander.Option {
+	klog.Info("brz-log: expander strat: random")
 	if len(expansionOptions) <= 0 {
 		return nil
 	}
 
+	klog.Infof("brz-log: len(expansionOptions): %v\n", len(expansionOptions))
 	pos := rand.Int31n(int32(len(expansionOptions)))
+	klog.Infof("brz-log: returning pos: %v\n", pos)
 	return &expansionOptions[pos]
 }

@@ -50,7 +50,28 @@ var BasicIgnoredLabels = map[string]bool{
 	"beta.kubernetes.io/fluentd-ds-ready": true, // this is internal label used for determining if fluentd should be installed as deamon set. Used for migration 1.8 to 1.9.
 	"kops.k8s.io/instancegroup":           true, // this is a label used by kops to identify "instance group" names. it's value is variable, defeating check of similar node groups
 }
-
+/*
+  app=platform-sidekiq
+	arch=x86
+	beta.kubernetes.io/arch=amd64
+	beta.kubernetes.io/instance-type=c6a.12xlarge
+	beta.kubernetes.io/os=linux
+	environment=us-east-1
+	failure-domain.beta.kubernetes.io/region=us-east-1
+	failure-domain.beta.kubernetes.io/zone=us-east-1a
+	instancefamily=c6a
+	instancegroup=c6a.12xlarge.sidekiq-worker
+	k8s_clustername=k8s.cluster-006.p-use-1.braze.com
+	kubernetes.io/arch=amd64
+	kubernetes.io/hostname=i-0e96c28fc6319ef0f
+	kubernetes.io/os=linux
+	node-role.kubernetes.io/node=
+	node.kubernetes.io/instance-type=c6a.12xlarge
+	topology.ebs.csi.aws.com/zone=us-east-1a
+	topology.kubernetes.io/region=us-east-1
+	topology.kubernetes.io/zone=us-east-1a
+	zone=us-east-1a
+*/
 // NodeInfoComparator is a function that tells if two nodes are from NodeGroups
 // similar enough to be considered a part of a single NodeGroupSet.
 type NodeInfoComparator func(n1, n2 *schedulerframework.NodeInfo) bool
@@ -76,7 +97,10 @@ func resourceListWithinTolerance(qtyList []resource.Quantity, maxDifferenceRatio
 
 func compareLabels(nodes []*schedulerframework.NodeInfo, ignoredLabels map[string]bool) bool {
 	labels := make(map[string][]string)
+	var nodeName string
 	for _, node := range nodes {
+		klog.Infof("brz-log: checking labels for node %v\n", node.Node().Name)
+		nodeName = node.Node().Name
 		for label, value := range node.Node().ObjectMeta.Labels {
 			ignore, _ := ignoredLabels[label]
 			if !ignore {
@@ -89,6 +113,7 @@ func compareLabels(nodes []*schedulerframework.NodeInfo, ignoredLabels map[strin
 			return false
 		}
 	}
+	klog.Infof("returning true for node %v\n", nodeName)
 	return true
 }
 
@@ -113,7 +138,6 @@ func CreateGenericNodeInfoComparator(extraIgnoredLabels []string) NodeInfoCompar
 // are similar enough to likely be the same type of machine and if the set of labels
 // is the same (except for a set of labels passed in to be ignored like hostname or zone).
 func IsCloudProviderNodeInfoSimilar(n1, n2 *schedulerframework.NodeInfo, ignoredLabels map[string]bool) bool {
-	klog.Info("brz-log: checking for node similarity in IsCloudProviderNodeInfoSimilar...")
 	capacity := make(map[apiv1.ResourceName][]resource.Quantity)
 	allocatable := make(map[apiv1.ResourceName][]resource.Quantity)
 	free := make(map[apiv1.ResourceName][]resource.Quantity)
