@@ -48,6 +48,7 @@ func (b *BalancingNodeGroupSetProcessor) FindSimilarNodeGroups(context *context.
 	}
 	for _, ng := range context.CloudProvider.NodeGroups() {
 		ngId := ng.Id()
+		klog.Infof("nodeGroupId, ngId: %v, %v\n", nodeGroupId, ngId)
 		if ngId == nodeGroupId {
 			continue
 		}
@@ -177,6 +178,7 @@ func (b *BalancingNodeGroupSetProcessor) BalanceScaleUpBetweenGroups(context *co
 		}
 	}
 
+	klog.Infof("balancing result: %v\n", result)
 	return result, nil
 }
 

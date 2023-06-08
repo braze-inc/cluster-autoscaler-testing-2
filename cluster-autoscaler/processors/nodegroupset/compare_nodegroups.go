@@ -22,6 +22,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/scheduler"
+	klog "k8s.io/klog/v2"
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
@@ -112,6 +113,7 @@ func CreateGenericNodeInfoComparator(extraIgnoredLabels []string) NodeInfoCompar
 // are similar enough to likely be the same type of machine and if the set of labels
 // is the same (except for a set of labels passed in to be ignored like hostname or zone).
 func IsCloudProviderNodeInfoSimilar(n1, n2 *schedulerframework.NodeInfo, ignoredLabels map[string]bool) bool {
+	klog.Info("brz-log: checking for node similarity in IsCloudProviderNodeInfoSimilar...")
 	capacity := make(map[apiv1.ResourceName][]resource.Quantity)
 	allocatable := make(map[apiv1.ResourceName][]resource.Quantity)
 	free := make(map[apiv1.ResourceName][]resource.Quantity)
@@ -151,15 +153,19 @@ func IsCloudProviderNodeInfoSimilar(n1, n2 *schedulerframework.NodeInfo, ignored
 
 	// For allocatable and free we allow resource quantities to be within a few % of each other
 	if !resourceMapsWithinTolerance(allocatable, MaxAllocatableDifferenceRatio) {
+		klog.Info("brz-log: allocatable resources not within tolerance")
 		return false
 	}
 	if !resourceMapsWithinTolerance(free, MaxFreeDifferenceRatio) {
+		klog.Info("brz-log: free resources not within tolerance")
 		return false
 	}
 
 	if !compareLabels(nodes, ignoredLabels) {
+		klog.Info("brz-log: labels mismatch")
 		return false
 	}
+	klog.Info("brz-log: node is similar")
 
 	return true
 }

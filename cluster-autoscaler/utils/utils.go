@@ -17,6 +17,8 @@ limitations under the License.
 package utils
 
 import (
+	"strings"
+
 	apiv1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	klog "k8s.io/klog/v2"
@@ -56,6 +58,13 @@ func FilterOutNodes(nodes []*apiv1.Node, nodesToFilterOut []*apiv1.Node) []*apiv
 	return filtered
 }
 
+func printSpec(s, s2 apiv1.PodSpec) {
+	klog.Infof("comparing volumes: %v\n", apiequality.Semantic.DeepEqual(s.Volumes, s2.Volumes))
+	klog.Infof("comparing init containers: %v\n", apiequality.Semantic.DeepEqual(s.InitContainers, s2.InitContainers))
+	klog.Infof("comparing containers: %v\n", apiequality.Semantic.DeepEqual(s.Containers, s2.Containers))
+	klog.Infof("comparing specs: %v\n", apiequality.Semantic.DeepEqual(s, s2))
+}
+
 // PodSpecSemanticallyEqual returns true if two pod specs are similar after dropping
 // the fields we don't care about
 // Due to the generated suffixes, a strict DeepEquals check will fail and generate
@@ -64,10 +73,12 @@ func FilterOutNodes(nodes []*apiv1.Node, nodesToFilterOut []*apiv1.Node) []*apiv
 func PodSpecSemanticallyEqual(p1 apiv1.PodSpec, p2 apiv1.PodSpec) bool {
 	p1Spec := sanitizePodSpec(p1)
 	p2Spec := sanitizePodSpec(p2)
+	//printSpec(p1Spec, p2Spec)
 	return apiequality.Semantic.DeepEqual(p1Spec, p2Spec)
 }
 
 func sanitizePodSpec(podSpec apiv1.PodSpec) apiv1.PodSpec {
+	dropInitContainers(&podSpec)
 	dropProjectedVolumesAndMounts(&podSpec)
 	dropHostname(&podSpec)
 	return podSpec
@@ -77,7 +88,9 @@ func dropProjectedVolumesAndMounts(podSpec *apiv1.PodSpec) {
 	projectedVolumeNames := map[string]bool{}
 	var volumes []apiv1.Volume
 	for _, v := range podSpec.Volumes {
-		if v.Projected == nil {
+		if strings.Contains(v.Name, "kube-api-access") {
+			continue
+		} else if v.Projected == nil {
 			volumes = append(volumes, v)
 		} else {
 			projectedVolumeNames[v.Name] = true
@@ -88,7 +101,9 @@ func dropProjectedVolumesAndMounts(podSpec *apiv1.PodSpec) {
 	for i := range podSpec.Containers {
 		var volumeMounts []apiv1.VolumeMount
 		for _, mount := range podSpec.Containers[i].VolumeMounts {
-			if ok := projectedVolumeNames[mount.Name]; !ok {
+			if strings.Contains(mount.Name, "kube-api-access") {
+				continue
+			} else if ok := projectedVolumeNames[mount.Name]; !ok {
 				volumeMounts = append(volumeMounts, mount)
 			}
 		}
@@ -96,6 +111,9 @@ func dropProjectedVolumesAndMounts(podSpec *apiv1.PodSpec) {
 	}
 }
 
+func dropInitContainers(podSpec *apiv1.PodSpec) {
+	podSpec.InitContainers = make([]apiv1.Container, 0)
+}
 func dropHostname(podSpec *apiv1.PodSpec) {
 	podSpec.Hostname = ""
 }

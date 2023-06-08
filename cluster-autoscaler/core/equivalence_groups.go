@@ -20,6 +20,7 @@ import (
 	"reflect"
 
 	"k8s.io/autoscaler/cluster-autoscaler/utils"
+	klog "k8s.io/klog/v2"
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -95,7 +96,10 @@ func groupPodsBySchedulingProperties(pods []*apiv1.Pod) map[equivalenceGroupId][
 func match(egs []equivalenceGroup, pod *apiv1.Pod) *equivalenceGroupId {
 	for _, g := range egs {
 		if reflect.DeepEqual(pod.Labels, g.representant.Labels) && utils.PodSpecSemanticallyEqual(pod.Spec, g.representant.Spec) {
+			klog.Infof("brz-log: pod %v is equal to pod %v", pod.Name, g.representant.Name)
 			return &g.id
+		} else {
+			klog.Infof("brz-log: pod %v is not equal to pod %v", pod.Name, g.representant.Name)
 		}
 	}
 	return nil
