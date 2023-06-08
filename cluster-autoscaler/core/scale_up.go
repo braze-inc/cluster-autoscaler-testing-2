@@ -43,9 +43,9 @@ import (
 	"k8s.io/autoscaler/cluster-autoscaler/utils/klogx"
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 
-	klog "k8s.io/klog/v2"
-
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	klog "k8s.io/klog/v2"
 )
 
 type skippedReasons struct {
@@ -279,6 +279,9 @@ func processNodeGroups(context *context.AutoscalingContext, nodeGroupChan chan c
 func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors *ca_processors.AutoscalingProcessors, clusterStateRegistry *clusterstate.ClusterStateRegistry, resourceManager *scaleup.ResourceManager, unschedulablePods []*apiv1.Pod,
 	nodes []*apiv1.Node, daemonSets []*appsv1.DaemonSet, nodeInfos map[string]*schedulerframework.NodeInfo, ignoredTaints taints.TaintKeySet) (*status.ScaleUpStatus, errors.AutoscalerError) {
 
+	spanScaleUpOpts := []ddtrace.StartSpanOption{
+		tracer.ResourceName(string(metrics.ScaleUp)),
+	}
 	//klog.Info("brz-log: in scale_up.ScaleUp()")
 	//klog.Infof("brz-log: number of unschedulablePods: %v\n", len(unschedulablePods))
 
@@ -300,6 +303,10 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	}
 	klogx.V(1).Over(loggingQuota).Infof("%v other pods are also unschedulable", -loggingQuota.Left())
 	podEquivalenceGroups := buildPodEquivalenceGroups(unschedulablePods)
+
+	for _, g := range podEquivalenceGroups {
+		klog.V(1).Infof("Size of Equvalence Groups %v", len(g.pods))
+	}
 	//for _, p := range podEquivalenceGroups {
 	//	for _, _p := range p.pods {
 	//		klog.Infof("gol-zrb: p.pod in podEquGrp: %v\n", _p.Name)
@@ -307,7 +314,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	//}
 
 	// Start child span for scaleup.upcomingNodes
-	spanScaleUpUpcomingNodes, _ := tracer.StartSpanFromContext(sctx, "scaleup.upcomingNodes")
+	spanScaleUpUpcomingNodes, _ := tracer.StartSpanFromContext(sctx, "scaleup.upcomingNodes", spanScaleUpOpts...)
 	upcomingNodes := make([]*schedulerframework.NodeInfo, 0)
 	for nodeGroup, numberOfNodes := range clusterStateRegistry.GetUpcomingNodes() {
 		nodeTemplate, found := nodeInfos[nodeGroup]
@@ -328,7 +335,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	klog.V(4).Infof("Upcoming %d nodes", len(upcomingNodes))
 
 	// Start child span for scaleup.nodeGroups
-	spanScaleUpNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.nodeGroups")
+	spanScaleUpNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.nodeGroups", spanScaleUpOpts...)
 	nodeGroups := context.CloudProvider.NodeGroups()
 	// Finish child span for scaleup.nodeGroups
 	spanScaleUpNodeGroups.Finish()
@@ -336,7 +343,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 
 	if processors != nil && processors.NodeGroupListProcessor != nil {
 		// Start child span for scaleup.nodeGroupProcessor
-		spanScaleUpNodeGroupProcessor, _ := tracer.StartSpanFromContext(sctx, "scaleup.nodeGroupProcessor")
+		spanScaleUpNodeGroupProcessor, _ := tracer.StartSpanFromContext(sctx, "scaleup.nodeGroupProcessor", spanScaleUpOpts...)
 		var errProc error
 		nodeGroups, nodeInfos, errProc = processors.NodeGroupListProcessor.Process(context, nodeGroups, nodeInfos, unschedulablePods)
 		if errProc != nil {
@@ -349,7 +356,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	}
 
 	// Start child span for scaleup.resourcesLeft
-	spanScaleUpResourcesLeft, _ := tracer.StartSpanFromContext(sctx, "scaleup.resourcesLeft")
+	spanScaleUpResourcesLeft, _ := tracer.StartSpanFromContext(sctx, "scaleup.resourcesLeft", spanScaleUpOpts...)
 	resourcesLeft, err := resourceManager.ResourcesLeft(context, nodeInfos, nodes)
 	if err != nil {
 		// Finish child span for scaleup.resourcesLeft
@@ -374,7 +381,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	processedGroupChan := make(chan processedNodeGroup, 25)
 
 	// Start child span for scaleup.processNodeGroups
-	spanScaleUpProcessNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.processNodeGroups")
+	spanScaleUpProcessNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.processNodeGroups", spanScaleUpOpts...)
 	go func() {
 		for i := 0; i < 5; i++ {
 			go processNodeGroups(context, nodeGroupChan, &wg, &mutex, processedGroupChan, clusterStateRegistry, now, nodeInfos, resourcesLeft, resourceManager, podEquivalenceGroups, upcomingNodes)
@@ -482,7 +489,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		options = append(options, o)
 	}
 	// Start child span for scaleup.pickBestOption
-	spanScaleUpPickBestOption, _ := tracer.StartSpanFromContext(sctx, "scaleup.pickBestOption")
+	spanScaleUpPickBestOption, _ := tracer.StartSpanFromContext(sctx, "scaleup.pickBestOption", spanScaleUpOpts...)
 	bestOption := context.ExpanderStrategy.BestOption(options, nodeInfos)
 	// Finish child span for scaleup.pickBestOption
 	spanScaleUpPickBestOption.Finish()
@@ -496,7 +503,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		klog.V(1).Infof("Estimated %d nodes needed in %s", bestOption.NodeCount, bestOption.NodeGroup.Id())
 
 		// Start child span for scaleup.getCappedNewNodeCount
-		spanScaleUpGetCappedNewNodeCount, _ := tracer.StartSpanFromContext(sctx, "scaleup.getCappedNewNodeCount")
+		spanScaleUpGetCappedNewNodeCount, _ := tracer.StartSpanFromContext(sctx, "scaleup.getCappedNewNodeCount", spanScaleUpOpts...)
 		newNodes := bestOption.NodeCount
 		newNodeCount, err := getCappedNewNodeCount(context, newNodes, len(nodes)+len(upcomingNodes))
 		if err != nil {
@@ -509,7 +516,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		spanScaleUpGetCappedNewNodeCount.Finish()
 
 		// Start child span for scaleup.createNodeGroupResults
-		spanScaleUpCreateNodeGroupResults, _ := tracer.StartSpanFromContext(sctx, "scaleup.createNodeGroupResults")
+		spanScaleUpCreateNodeGroupResults, _ := tracer.StartSpanFromContext(sctx, "scaleup.createNodeGroupResults", spanScaleUpOpts...)
 		createNodeGroupResults := make([]nodegroups.CreateNodeGroupResult, 0)
 		if !bestOption.NodeGroup.Exist() {
 			oldId := bestOption.NodeGroup.Id()
@@ -587,7 +594,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		// apply upper limits for CPU and memory
 		//klog.Info("brz-log: applying resource limits to nodes")
 		// Start child span for scaleup.applyResourceLimits
-		spanScaleUpApplyResourceLimits, _ := tracer.StartSpanFromContext(sctx, "scaleup.applyResourceLimits")
+		spanScaleUpApplyResourceLimits, _ := tracer.StartSpanFromContext(sctx, "scaleup.applyResourceLimits", spanScaleUpOpts...)
 		newNodes, err = resourceManager.ApplyResourcesLimits(context, newNodes, resourcesLeft, nodeInfo, bestOption.NodeGroup)
 		//klog.Infof("brz-log: number of newNodes after resource application: %d\n", newNodes)
 		if err != nil {
@@ -603,7 +610,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		targetNodeGroups := []cloudprovider.NodeGroup{bestOption.NodeGroup}
 		if context.BalanceSimilarNodeGroups {
 			// Start child span for scaleup.balanceSimilarNodeGroups
-			spanScaleUpBalanceSimilarNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.balanceSimilarNodeGroups")
+			spanScaleUpBalanceSimilarNodeGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.balanceSimilarNodeGroups", spanScaleUpOpts...)
 			//klog.Info("brz-log: context.BalanceSimilarNodeGroups is %v", context.BalanceSimilarNodeGroups)
 			//klog.Info("calculating similar node groups...")
 			similarNodeGroups, typedErr := processors.NodeGroupSetProcessor.FindSimilarNodeGroups(context, bestOption.NodeGroup, nodeInfos)
@@ -641,7 +648,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		}
 
 		// Start child span for scaleup.balanceScaleUpBetweenGroups
-		spanScaleUpBalanceScaleUpBetweenGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.balanceScaleUpBetweenGroups")
+		spanScaleUpBalanceScaleUpBetweenGroups, _ := tracer.StartSpanFromContext(sctx, "scaleup.balanceScaleUpBetweenGroups", spanScaleUpOpts...)
 		scaleUpInfos, typedErr := processors.NodeGroupSetProcessor.BalanceScaleUpBetweenGroups(
 			context, targetNodeGroups, newNodes)
 		if typedErr != nil {
@@ -657,7 +664,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		//klog.Info("brz-log: done calculating scaleup plan...")
 		klog.V(1).Infof("Final scale-up plan: %v", scaleUpInfos)
 		// Start child span for scaleup.executeScaleUp
-		spanScaleUpExecuteScaleUp, _ := tracer.StartSpanFromContext(sctx, "scaleup.executeScaleUp")
+		spanScaleUpExecuteScaleUp, _ := tracer.StartSpanFromContext(sctx, "scaleup.executeScaleUp", spanScaleUpOpts...)
 		for _, info := range scaleUpInfos {
 			typedErr := executeScaleUp(context, clusterStateRegistry, info, gpu.GetGpuTypeForMetrics(gpuLabel, availableGPUTypes, nodeInfo.Node(), nil), now)
 			if typedErr != nil {
@@ -677,7 +684,7 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 		spanScaleUpExecuteScaleUp.Finish()
 
 		// Start child span for scaleup.clusterStateRecalculate
-		spanScaleUpClusterStateRecalculate, _ := tracer.StartSpanFromContext(sctx, "scaleup.clusterStateRecalculate")
+		spanScaleUpClusterStateRecalculate, _ := tracer.StartSpanFromContext(sctx, "scaleup.clusterStateRecalculate", spanScaleUpOpts...)
 		clusterStateRegistry.Recalculate()
 		// Finish child span for scaleup.clusterStateRecalculate
 		spanScaleUpClusterStateRecalculate.Finish()
