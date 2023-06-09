@@ -396,11 +396,6 @@ func ScaleUp(sctx goctx.Context, context *context.AutoscalingContext, processors
 	// Finish child span for scaleup.processNodeGroups
 	spanScaleUpProcessNodeGroups.Finish()
 
-	//for k, v := range expansionOptions2 {
-	for _, v := range expansionOptions {
-		klog.Infof("exop2 nodeId, pods: %v => %v\n", v.NodeGroup.Id(), len(v.Pods))
-	}
-
 	if len(expansionOptions) == 0 {
 		klog.V(1).Info("No expansion options")
 		return &status.ScaleUpStatus{
