@@ -20,7 +20,6 @@ import (
 	"math/rand"
 
 	"k8s.io/autoscaler/cluster-autoscaler/expander"
-	"k8s.io/klog/v2"
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
@@ -50,10 +49,6 @@ func (r *random) BestOptions(expansionOptions []expander.Option, nodeInfo map[st
 func (r *random) BestOption(expansionOptions []expander.Option, nodeInfo map[string]*schedulerframework.NodeInfo) *expander.Option {
 	if len(expansionOptions) <= 0 {
 		return nil
-	}
-
-	for _, o := range expansionOptions {
-		klog.Info(o.NodeGroup.Id(), len(o.Pods))
 	}
 
 	pos := rand.Int31n(int32(len(expansionOptions)))
