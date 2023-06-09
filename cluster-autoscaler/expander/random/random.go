@@ -48,13 +48,14 @@ func (r *random) BestOptions(expansionOptions []expander.Option, nodeInfo map[st
 
 // BestOption selects from the expansion options at random
 func (r *random) BestOption(expansionOptions []expander.Option, nodeInfo map[string]*schedulerframework.NodeInfo) *expander.Option {
-	klog.Info("brz-log: expander strat: random")
 	if len(expansionOptions) <= 0 {
 		return nil
 	}
 
-	klog.Infof("brz-log: len(expansionOptions): %v\n", len(expansionOptions))
+	for _, o := range expansionOptions {
+		klog.Info(o.NodeGroup.Id(), len(o.Pods))
+	}
+
 	pos := rand.Int31n(int32(len(expansionOptions)))
-	klog.Infof("brz-log: returning pos: %v\n", pos)
 	return &expansionOptions[pos]
 }

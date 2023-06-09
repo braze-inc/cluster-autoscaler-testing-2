@@ -122,7 +122,6 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 	//threads := 15
 	wg.Add(workers)
 
-	//klog.Infof("brz-log: Spinning up %v workers", workers)
 	for i := 0; i < workers; i++ {
 		go func(workerId int) {
 			findUnschedulablePods(&wg, &lock, workerId, scheduledPods, unschedulableCandidatesChan, unschedulablePodsChan)
@@ -154,7 +153,6 @@ func (p *filterOutSchedulablePodListProcessor) filterOutSchedulableByPacking(uns
 
 	p.schedulingSimulator.DropOldHints()
 
-	//klog.Infof("brz-log: unschedulable pod count: %v", len(unschedulablePods))
 	return unschedulablePods, nil
 }
 
