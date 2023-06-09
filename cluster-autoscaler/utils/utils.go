@@ -58,13 +58,6 @@ func FilterOutNodes(nodes []*apiv1.Node, nodesToFilterOut []*apiv1.Node) []*apiv
 	return filtered
 }
 
-func printSpec(s, s2 apiv1.PodSpec) {
-	klog.Infof("comparing volumes: %v\n", apiequality.Semantic.DeepEqual(s.Volumes, s2.Volumes))
-	klog.Infof("comparing init containers: %v\n", apiequality.Semantic.DeepEqual(s.InitContainers, s2.InitContainers))
-	klog.Infof("comparing containers: %v\n", apiequality.Semantic.DeepEqual(s.Containers, s2.Containers))
-	klog.Infof("comparing specs: %v\n", apiequality.Semantic.DeepEqual(s, s2))
-}
-
 // PodSpecSemanticallyEqual returns true if two pod specs are similar after dropping
 // the fields we don't care about
 // Due to the generated suffixes, a strict DeepEquals check will fail and generate
@@ -73,7 +66,6 @@ func printSpec(s, s2 apiv1.PodSpec) {
 func PodSpecSemanticallyEqual(p1 apiv1.PodSpec, p2 apiv1.PodSpec) bool {
 	p1Spec := sanitizePodSpec(p1)
 	p2Spec := sanitizePodSpec(p2)
-	//printSpec(p1Spec, p2Spec)
 	return apiequality.Semantic.DeepEqual(p1Spec, p2Spec)
 }
 

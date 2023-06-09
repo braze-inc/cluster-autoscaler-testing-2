@@ -50,28 +50,6 @@ var BasicIgnoredLabels = map[string]bool{
 	"kops.k8s.io/instancegroup":           true, // this is a label used by kops to identify "instance group" names. it's value is variable, defeating check of similar node groups
 }
 
-/*
-  app=platform-sidekiq
-	arch=x86
-	beta.kubernetes.io/arch=amd64
-	beta.kubernetes.io/instance-type=c6a.12xlarge
-	beta.kubernetes.io/os=linux
-	environment=us-east-1
-	failure-domain.beta.kubernetes.io/region=us-east-1
-	failure-domain.beta.kubernetes.io/zone=us-east-1a
-	instancefamily=c6a
-	instancegroup=c6a.12xlarge.sidekiq-worker
-	k8s_clustername=k8s.cluster-006.p-use-1.braze.com
-	kubernetes.io/arch=amd64
-	kubernetes.io/hostname=i-0e96c28fc6319ef0f
-	kubernetes.io/os=linux
-	node-role.kubernetes.io/node=
-	node.kubernetes.io/instance-type=c6a.12xlarge
-	topology.ebs.csi.aws.com/zone=us-east-1a
-	topology.kubernetes.io/region=us-east-1
-	topology.kubernetes.io/zone=us-east-1a
-	zone=us-east-1a
-*/
 // NodeInfoComparator is a function that tells if two nodes are from NodeGroups
 // similar enough to be considered a part of a single NodeGroupSet.
 type NodeInfoComparator func(n1, n2 *schedulerframework.NodeInfo) bool
