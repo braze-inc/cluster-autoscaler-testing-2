@@ -164,16 +164,9 @@ func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsCha
 	defer wg.Done()
 
 	for pod := range podsChan {
-		//if pod.Spec.NodeName != "" {
-		//_scheduledPods = append(_scheduledPods, pod)
-		//scheduledPodsChan <- pod
-		//continue
-		//}
 		_, condition := podv1.GetPodCondition(&pod.Status, apiv1.PodScheduled)
 		if condition != nil && condition.Status == apiv1.ConditionFalse && condition.Reason == apiv1.PodReasonUnschedulable {
-			//_unschedulablePods = append(_unschedulablePods, pod)
 			unschedulablePodsChan <- pod
-			//_unschedulablePods = append(_unschedulablePods, pod)
 		}
 	}
 }
@@ -193,7 +186,6 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 	var wg sync.WaitGroup
 	wg.Add(workers)
 
-	//klog.Infof("brz-log: Spinning up %v workers", workers)
 	for i := 0; i < workers; i++ {
 		go listScheduledAndUnschedulablePods(&wg, i, podsChan, unschedulablePodsChan)
 	}
@@ -215,7 +207,6 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 		_unschedulablePods = append(_unschedulablePods, p)
 	}
 
-	//klog.Infof("brz-log: unscheduled pod count: %v", len(_unschedulablePods))
 	return _unschedulablePods, nil
 }
 

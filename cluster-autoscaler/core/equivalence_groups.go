@@ -53,7 +53,7 @@ type equivalenceGroup struct {
 	representant *apiv1.Pod
 }
 
-const maxEquivalenceGroupsByController = 10
+const maxEquivalenceGroupsByController = 30
 
 // groupPodsBySchedulingProperties groups pods based on scheduling properties. Group ID is meaningless.
 // TODO(x13n): refactor this to have shared logic with PodSchedulableMap.
