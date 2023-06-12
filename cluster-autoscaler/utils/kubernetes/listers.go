@@ -151,7 +151,7 @@ func (r listerRegistryImpl) StatefulSetLister() v1appslister.StatefulSetLister {
 
 // PodLister lists pods.
 type PodLister interface {
-	List(workers int) ([]*apiv1.Pod, error)
+	List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error)
 }
 
 // UnschedulablePodLister lists unscheduled pods
@@ -159,7 +159,7 @@ type UnschedulablePodLister struct {
 	podLister v1lister.PodLister
 }
 
-func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
+func listUnschedulablePods(wg *sync.WaitGroup, workerId int, podsChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
 
 	defer wg.Done()
 
@@ -172,12 +172,14 @@ func listScheduledAndUnschedulablePods(wg *sync.WaitGroup, workerId int, podsCha
 }
 
 // List returns all unscheduled pods.
-func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv1.Pod, error) {
-	_unschedulablePods := make([]*apiv1.Pod, 0)
+func (unschedulablePodLister *UnschedulablePodLister) List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error) {
 
-	allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
+	unschedulablePods := make([]*apiv1.Pod, 0)
+
+	//allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
+	_unschedulablePods, err := unschedulablePodLister.podLister.List(podSelector)
 	if err != nil {
-		return _unschedulablePods, err
+		return unschedulablePods, err
 	}
 
 	podsChan := make(chan *apiv1.Pod, 1000)
@@ -187,12 +189,12 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 	wg.Add(workers)
 
 	for i := 0; i < workers; i++ {
-		go listScheduledAndUnschedulablePods(&wg, i, podsChan, unschedulablePodsChan)
+		go listUnschedulablePods(&wg, i, podsChan, unschedulablePodsChan)
 	}
 
 	// Push all pods into channel by looping over slice
 	go func(c chan *apiv1.Pod) {
-		for _, pod := range allPods {
+		for _, pod := range _unschedulablePods {
 			c <- pod
 		}
 		close(c)
@@ -204,10 +206,10 @@ func (unschedulablePodLister *UnschedulablePodLister) List(workers int) ([]*apiv
 	}()
 
 	for p := range unschedulablePodsChan {
-		_unschedulablePods = append(_unschedulablePods, p)
+		unschedulablePods = append(unschedulablePods, p)
 	}
 
-	return _unschedulablePods, nil
+	return unschedulablePods, nil
 }
 
 // NewUnschedulablePodLister returns a lister providing pods that failed to be scheduled.
@@ -235,7 +237,7 @@ type ScheduledPodLister struct {
 }
 
 // List returns all scheduled pods.
-func (lister *ScheduledPodLister) List(workers int) ([]*apiv1.Pod, error) {
+func (lister *ScheduledPodLister) List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error) {
 	return lister.podLister.List(labels.Everything())
 }
 

@@ -35,6 +35,8 @@ import (
 	"github.com/spf13/pflag"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apiserver/pkg/server/mux"
 	"k8s.io/apiserver/pkg/server/routes"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -91,6 +93,8 @@ func multiStringFlag(name string, usage string) *MultiStringFlag {
 
 var (
 	workerThreads           = flag.Int("workers", 5, "number of workers to use for concurrency")
+	_podLabelSelector       = flag.String("label-selector", "", "label to use as selector for pods")
+	excludePodLabelSelector = flag.String("exclude-label-selector", "", "handle scaling for all labels except this")
 	clusterName             = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
 	address                 = flag.String("address", ":8085", "The address to expose prometheus metrics.")
 	kubernetes              = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
@@ -244,6 +248,21 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	if *maxDrainParallelismFlag > 1 && !*parallelDrain {
 		klog.Fatalf("Invalid configuration, could not use --max-drain-parallelism > 1 if --parallel-drain is false")
 	}
+
+	// create selectors
+	var podLabelSelector labels.Selector
+	if *_podLabelSelector == "" {
+		podLabelSelector = labels.Everything()
+	} else {
+		splitLabel := strings.Split(*_podLabelSelector, "=")
+		_requirements, err := labels.NewRequirement(splitLabel[0], selection.Equals, []string{splitLabel[1]})
+		if err != nil {
+			klog.Fatal("label selector requirement validation failed")
+		}
+		podLabelSelector = labels.NewSelector()
+		podLabelSelector = podLabelSelector.Add(*_requirements)
+	}
+
 	return config.AutoscalingOptions{
 		NodeGroupDefaults: config.NodeGroupAutoscalingOptions{
 			ScaleDownUtilizationThreshold:    *scaleDownUtilizationThreshold,
@@ -252,6 +271,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 			ScaleDownUnreadyTime:             *scaleDownUnreadyTime,
 		},
 		WorkerThreads:                      *workerThreads,
+		PodLabelSelector:                   podLabelSelector,
 		CloudConfig:                        *cloudConfig,
 		CloudProviderName:                  *cloudProviderFlag,
 		NodeGroupAutoDiscovery:             *nodeGroupAutoDiscoveryFlag,

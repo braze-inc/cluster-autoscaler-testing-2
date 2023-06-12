@@ -300,7 +300,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 		klog.Errorf("Failed to get node list: %v", typedErr)
 		return typedErr
 	}
-	originalScheduledPods, err := scheduledPodLister.List(a.WorkerThreads)
+	originalScheduledPods, err := scheduledPodLister.List(a.WorkerThreads, labels.Everything())
 	if err != nil {
 		klog.Errorf("Failed to list scheduled pods: %v", err)
 		return errors.ToAutoscalerError(errors.ApiCallError, err)
@@ -450,7 +450,7 @@ func (a *StaticAutoscaler) RunOnce(currentTime time.Time) errors.AutoscalerError
 
 	metrics.UpdateLastTime(metrics.Autoscaling, time.Now())
 
-	unschedulablePods, err := unschedulablePodLister.List(a.WorkerThreads)
+	unschedulablePods, err := unschedulablePodLister.List(a.WorkerThreads, a.PodLabelSelector)
 
 	if err != nil {
 		klog.Errorf("Failed to list unscheduled pods: %v", err)
