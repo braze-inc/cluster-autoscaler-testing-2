@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
 	"k8s.io/autoscaler/cluster-autoscaler/context"
 	"k8s.io/autoscaler/cluster-autoscaler/core/utils"
@@ -186,7 +187,7 @@ func (p *MixedTemplateNodeInfoProvider) Process(ctx *context.AutoscalingContext,
 }
 
 func getPodsForNodes(listers kube_util.ListerRegistry, workers int) (map[string][]*apiv1.Pod, errors.AutoscalerError) {
-	pods, err := listers.ScheduledPodLister().List(workers)
+	pods, err := listers.ScheduledPodLister().List(workers, labels.Everything())
 	if err != nil {
 		return nil, errors.ToAutoscalerError(errors.ApiCallError, err)
 	}

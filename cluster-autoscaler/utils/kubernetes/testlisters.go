@@ -23,6 +23,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	v1appslister "k8s.io/client-go/listers/apps/v1"
 	v1batchlister "k8s.io/client-go/listers/batch/v1"
 	v1lister "k8s.io/client-go/listers/core/v1"
@@ -35,7 +36,7 @@ type TestPodLister struct {
 }
 
 // List returns all pods in test lister.
-func (lister TestPodLister) List(workers int) ([]*apiv1.Pod, error) {
+func (lister TestPodLister) List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error) {
 	return lister.pods, nil
 }
 
