@@ -231,14 +231,17 @@ func (a *StaticAutoscaler) cleanUpIfRequired() {
 	}
 
 	// CA can die at any time. Removing taints that might have been left from the previous run.
-	if allNodes, err := a.AllNodeLister().List(); err != nil {
+	//if allNodes, err := a.AllNodeLister().List(); err != nil {
+	if targetNodes, err := a.AllNodeLister().List(a.NodeLabelSelector); err != nil {
 		klog.Errorf("Failed to list ready nodes, not cleaning up taints: %v", err)
 	} else {
-		deletetaint.CleanAllToBeDeleted(allNodes,
+		//deletetaint.CleanAllToBeDeleted(allNodes,
+		deletetaint.CleanAllToBeDeleted(targetNodes,
 			a.AutoscalingContext.ClientSet, a.Recorder, a.CordonNodeBeforeTerminate)
 		if a.AutoscalingContext.AutoscalingOptions.MaxBulkSoftTaintCount == 0 {
 			// Clean old taints if soft taints handling is disabled
-			deletetaint.CleanAllDeletionCandidates(allNodes,
+			//deletetaint.CleanAllDeletionCandidates(allNodes,
+			deletetaint.CleanAllDeletionCandidates(targetNodes,
 				a.AutoscalingContext.ClientSet, a.Recorder)
 		}
 	}
@@ -879,12 +882,13 @@ func (a *StaticAutoscaler) ExitCleanUp() {
 }
 
 func (a *StaticAutoscaler) obtainNodeLists(cp cloudprovider.CloudProvider) ([]*apiv1.Node, []*apiv1.Node, errors.AutoscalerError) {
-	allNodes, err := a.AllNodeLister().List()
+	//allNodes, err := a.AllNodeLister().List(labels.Everything())
+	allNodes, err := a.AllNodeLister().List(a.NodeLabelSelector)
 	if err != nil {
 		klog.Errorf("Failed to list all nodes: %v", err)
 		return nil, nil, errors.ToAutoscalerError(errors.ApiCallError, err)
 	}
-	readyNodes, err := a.ReadyNodeLister().List()
+	readyNodes, err := a.ReadyNodeLister().List(a.NodeLabelSelector)
 	if err != nil {
 		klog.Errorf("Failed to list ready nodes: %v", err)
 		return nil, nil, errors.ToAutoscalerError(errors.ApiCallError, err)

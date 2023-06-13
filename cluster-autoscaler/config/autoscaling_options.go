@@ -221,4 +221,8 @@ type AutoscalingOptions struct {
 	PodLabelSelector labels.Selector
 	// exclusion pod selector
 	ExcludePodLabelSelector labels.Selector
+	// node selector
+	NodeLabelSelector labels.Selector
+	// exclusion pod selector
+	ExcludeNodeLabelSelector labels.Selector
 }

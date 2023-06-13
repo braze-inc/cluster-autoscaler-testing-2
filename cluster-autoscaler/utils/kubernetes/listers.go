@@ -258,7 +258,8 @@ func NewScheduledPodLister(kubeClient client.Interface, stopchannel <-chan struc
 
 // NodeLister lists nodes.
 type NodeLister interface {
-	List() ([]*apiv1.Node, error)
+	//List() ([]*apiv1.Node, error)
+	List(nodeSelector labels.Selector) ([]*apiv1.Node, error)
 	Get(name string) (*apiv1.Node, error)
 }
 
@@ -291,11 +292,12 @@ func NewNodeLister(kubeClient client.Interface, filter func(*apiv1.Node) bool, s
 }
 
 // List returns list of nodes.
-func (l *nodeListerImpl) List() ([]*apiv1.Node, error) {
+func (l *nodeListerImpl) List(nodeSelector labels.Selector) ([]*apiv1.Node, error) {
 	var nodes []*apiv1.Node
 	var err error
 
-	nodes, err = l.nodeLister.List(labels.Everything())
+	//nodes, err = l.nodeLister.List(labels.Everything())
+	nodes, err = l.nodeLister.List(nodeSelector)
 	if err != nil {
 		return []*apiv1.Node{}, err
 	}
