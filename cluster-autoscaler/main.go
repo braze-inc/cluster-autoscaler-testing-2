@@ -92,18 +92,18 @@ func multiStringFlag(name string, usage string) *MultiStringFlag {
 }
 
 var (
-	workerThreads           = flag.Int("workers", 5, "number of workers to use for concurrency")
-	_podLabelSelector       = flag.String("label-selector", "", "label to use as selector for pods")
-	excludePodLabelSelector = flag.String("exclude-label-selector", "", "handle scaling for all labels except this")
-	clusterName             = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
-	address                 = flag.String("address", ":8085", "The address to expose prometheus metrics.")
-	kubernetes              = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
-	kubeConfigFile          = flag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information.")
-	cloudConfig             = flag.String("cloud-config", "", "The path to the cloud provider configuration file.  Empty string for no configuration file.")
-	namespace               = flag.String("namespace", "kube-system", "Namespace in which cluster-autoscaler run.")
-	enforceNodeGroupMinSize = flag.Bool("enforce-node-group-min-size", false, "Should CA scale up the node group to the configured min size if needed.")
-	scaleDownEnabled        = flag.Bool("scale-down-enabled", true, "Should CA scale down the cluster")
-	scaleDownDelayAfterAdd  = flag.Duration("scale-down-delay-after-add", 10*time.Minute,
+	workerThreads            = flag.Int("workers", 5, "number of workers to use for concurrency")
+	_podLabelSelector        = flag.String("label-selector", "", "label to use as selector for pods")
+	_excludePodLabelSelector = flag.String("exclude-label-selector", "", "handle scaling for all labels except this")
+	clusterName              = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
+	address                  = flag.String("address", ":8085", "The address to expose prometheus metrics.")
+	kubernetes               = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
+	kubeConfigFile           = flag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information.")
+	cloudConfig              = flag.String("cloud-config", "", "The path to the cloud provider configuration file.  Empty string for no configuration file.")
+	namespace                = flag.String("namespace", "kube-system", "Namespace in which cluster-autoscaler run.")
+	enforceNodeGroupMinSize  = flag.Bool("enforce-node-group-min-size", false, "Should CA scale up the node group to the configured min size if needed.")
+	scaleDownEnabled         = flag.Bool("scale-down-enabled", true, "Should CA scale down the cluster")
+	scaleDownDelayAfterAdd   = flag.Duration("scale-down-delay-after-add", 10*time.Minute,
 		"How long after scale up that scale down evaluation resumes")
 	scaleDownDelayAfterDelete = flag.Duration("scale-down-delay-after-delete", 0,
 		"How long after node deletion that scale down evaluation resumes, defaults to scanInterval")
@@ -250,17 +250,37 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	}
 
 	// create selectors
-	var podLabelSelector labels.Selector
-	if *_podLabelSelector == "" {
-		podLabelSelector = labels.Everything()
-	} else {
-		splitLabel := strings.Split(*_podLabelSelector, "=")
-		_requirements, err := labels.NewRequirement(splitLabel[0], selection.Equals, []string{splitLabel[1]})
+	var _podSelectorOperator selection.Operator
+	var _podLabel, _podLabelValue string
+	var _podRequirements *labels.Requirement
+	var podSelector labels.Selector
+
+	if *_podLabelSelector != "" && *_excludePodLabelSelector != "" {
+		klog.Fatal("--label-selector and --exclude-label-selector cannot both be used")
+	}
+
+	if *_podLabelSelector != "" {
+		_podLabel = strings.Split(*_podLabelSelector, "=")[0]
+		_podLabelValue = strings.Split(*_podLabelSelector, "=")[1]
+		_podSelectorOperator = selection.Equals
+		_podRequirements, err = labels.NewRequirement(_podLabel, _podSelectorOperator, []string{_podLabelValue})
 		if err != nil {
 			klog.Fatal("label selector requirement validation failed")
 		}
-		podLabelSelector = labels.NewSelector()
-		podLabelSelector = podLabelSelector.Add(*_requirements)
+		podSelector = labels.NewSelector()
+		podSelector = podSelector.Add(*_podRequirements)
+	} else if *_excludePodLabelSelector != "" {
+		_podLabel = strings.Split(*_excludePodLabelSelector, "=")[0]
+		_podLabelValue = strings.Split(*_excludePodLabelSelector, "=")[1]
+		_podSelectorOperator = selection.NotEquals
+		_podRequirements, err = labels.NewRequirement(_podLabel, _podSelectorOperator, []string{_podLabelValue})
+		if err != nil {
+			klog.Fatal("label selector requirement validation failed")
+		}
+		podSelector = labels.NewSelector()
+		podSelector = podSelector.Add(*_podRequirements)
+	} else {
+		podSelector = labels.Everything()
 	}
 
 	return config.AutoscalingOptions{
@@ -271,7 +291,7 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 			ScaleDownUnreadyTime:             *scaleDownUnreadyTime,
 		},
 		WorkerThreads:                      *workerThreads,
-		PodLabelSelector:                   podLabelSelector,
+		PodLabelSelector:                   podSelector,
 		CloudConfig:                        *cloudConfig,
 		CloudProviderName:                  *cloudProviderFlag,
 		NodeGroupAutoDiscovery:             *nodeGroupAutoDiscoveryFlag,
