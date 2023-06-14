@@ -320,7 +320,6 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	klog.Infof("Setting pod selector to %v\n", podSelector.String())
 	klog.Infof("Setting node selector to %v\n", nodeSelector.String())
 
-	os.Exit(0)
 	return config.AutoscalingOptions{
 		NodeGroupDefaults: config.NodeGroupAutoscalingOptions{
 			ScaleDownUtilizationThreshold:    *scaleDownUtilizationThreshold,
