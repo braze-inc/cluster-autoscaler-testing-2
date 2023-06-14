@@ -234,6 +234,37 @@ var (
 	enableDatadogProfiling = flag.Bool("enable-datadog-profiling", false, "Whether Datadog profiling should be enabled.")
 )
 
+// Helper function to create a selector based on label selector and filters
+func createSelector(labelSelector, excludeLabelSelector string, filters []string) (labels.Selector, error) {
+	selector := labels.Everything()
+
+	if labelSelector != "" && excludeLabelSelector != "" {
+		return nil, fmt.Errorf("label-selector and exclude-label-selector options are mutually exclusive for the same type")
+	}
+
+	if labelSelector != "" {
+		if len(filters) == 0 {
+			return nil, fmt.Errorf("you must specify at least one filter")
+		}
+		requirement, err := labels.NewRequirement(labelSelector, selection.In, filters)
+		if err != nil {
+			return nil, fmt.Errorf("label selector requirement validation failed: %s", err.Error())
+		}
+		selector = selector.Add(*requirement)
+	} else if excludeLabelSelector != "" {
+		if len(filters) == 0 {
+			return nil, fmt.Errorf("you must specify at least one filter")
+		}
+		requirement, err := labels.NewRequirement(excludeLabelSelector, selection.NotIn, filters)
+		if err != nil {
+			return nil, fmt.Errorf("label selector requirement validation failed: %s", err.Error())
+		}
+		selector = selector.Add(*requirement)
+	}
+
+	return selector, nil
+}
+
 func createAutoscalingOptions() config.AutoscalingOptions {
 	minCoresTotal, maxCoresTotal, err := parseMinMaxFlag(*coresTotal)
 	if err != nil {
@@ -255,68 +286,16 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 		klog.Fatalf("Invalid configuration, could not use --max-drain-parallelism > 1 if --parallel-drain is false")
 	}
 
-	// create selectors
-	podSelector := labels.NewSelector()
-	nodeSelector := labels.NewSelector()
-	var _podRequirements, _nodeRequirements *labels.Requirement
-
-	if *_podLabelSelector != "" && *_excludePodLabelSelector != "" {
-		klog.Fatal("--label-selector and --exclude-label-selector cannot both be used")
+	podSelector, err := createSelector(*_podLabelSelector, *_excludePodLabelSelector, *_podLabelFilters)
+	if err != nil {
+		klog.Fatalf("Failed to create pod selector: %s", err.Error())
 	}
 
-	if *_podLabelSelector != "" {
-		if len(*_podLabelFilters) == 0 {
-			klog.Fatal("you must specify at least one pod filter")
-		}
-		_podSelectorOperator := selection.In
-		_podRequirements, err = labels.NewRequirement(*_podLabelSelector, _podSelectorOperator, *_podLabelFilters)
-		if err != nil {
-			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
-		}
-		podSelector = podSelector.Add(*_podRequirements)
-	} else if *_excludePodLabelSelector != "" {
-		if len(*_podLabelFilters) == 0 {
-			klog.Fatal("you must specify at least one pod filter")
-		}
-		_podSelectorOperator := selection.NotIn
-		_podRequirements, err = labels.NewRequirement(*_excludePodLabelSelector, _podSelectorOperator, *_podLabelFilters)
-		if err != nil {
-			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
-		}
-		podSelector = podSelector.Add(*_podRequirements)
-
-	} else {
-		podSelector = labels.Everything()
+	// create node selector
+	nodeSelector, err := createSelector(*_nodeLabelSelector, *_excludeNodeLabelSelector, *_nodeLabelFilters)
+	if err != nil {
+		klog.Fatalf("Failed to create node selector: %s", err.Error())
 	}
-
-	if *_nodeLabelSelector != "" && *_excludeNodeLabelSelector != "" {
-		klog.Fatal("--label-selector and --exclude-label-selector cannot both be used")
-	}
-
-	if *_nodeLabelSelector != "" {
-		if len(*_nodeLabelFilters) == 0 {
-			klog.Fatal("you must specify at least one node filter")
-		}
-		_nodeSelectorOperator := selection.In
-		_nodeRequirements, err = labels.NewRequirement(*_nodeLabelSelector, _nodeSelectorOperator, *_nodeLabelFilters)
-		if err != nil {
-			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
-		}
-		nodeSelector = nodeSelector.Add(*_nodeRequirements)
-	} else if len(*_excludeNodeLabelSelector) > 0 {
-		if len(*_nodeLabelFilters) == 0 {
-			klog.Fatal("you must specify at least one node filter")
-		}
-		_nodeSelectorOperator := selection.NotIn
-		_nodeRequirements, err = labels.NewRequirement(*_excludeNodeLabelSelector, _nodeSelectorOperator, *_nodeLabelFilters)
-		if err != nil {
-			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
-		}
-		nodeSelector = nodeSelector.Add(*_nodeRequirements)
-	} else {
-		nodeSelector = labels.Everything()
-	}
-
 	klog.Infof("Setting pod selector to %v\n", podSelector.String())
 	klog.Infof("Setting node selector to %v\n", nodeSelector.String())
 
