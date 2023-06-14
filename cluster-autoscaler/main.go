@@ -92,20 +92,24 @@ func multiStringFlag(name string, usage string) *MultiStringFlag {
 }
 
 var (
-	workerThreads             = flag.Int("workers", 5, "number of workers to use for concurrency")
-	_podLabelSelector         = flag.String("pod-label-selector", "", "label to use as selector for pods")
-	_excludePodLabelSelector  = flag.String("exclude-pod-label-selector", "", "handle scaling for all pods except those which carry a matching label")
-	_nodeLabelSelector        = flag.String("node-label-selector", "", "label to use as selector for nodes")
-	_excludeNodeLabelSelector = flag.String("exclude-node-label-selector", "", "handle scaling for all node except those which carry a matching label")
-	clusterName               = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
-	address                   = flag.String("address", ":8085", "The address to expose prometheus metrics.")
-	kubernetes                = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
-	kubeConfigFile            = flag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information.")
-	cloudConfig               = flag.String("cloud-config", "", "The path to the cloud provider configuration file.  Empty string for no configuration file.")
-	namespace                 = flag.String("namespace", "kube-system", "Namespace in which cluster-autoscaler run.")
-	enforceNodeGroupMinSize   = flag.Bool("enforce-node-group-min-size", false, "Should CA scale up the node group to the configured min size if needed.")
-	scaleDownEnabled          = flag.Bool("scale-down-enabled", true, "Should CA scale down the cluster")
-	scaleDownDelayAfterAdd    = flag.Duration("scale-down-delay-after-add", 10*time.Minute,
+	workerThreads            = flag.Int("workers", 5, "number of workers to use for concurrency")
+	_podLabelSelector        = flag.String("pod-label-selector", "", "label name to use as selector for pods")
+	_excludePodLabelSelector = flag.String("exclude-pod-label-selector", "", "label name to use for exclusion selector")
+	_podLabelFilters         = multiStringFlag("pod-filter", "filters to use with pod-label-selector label."+
+		"these will be applied with either `notin` or `in' operator depending on whether you use the --exclude-pod-label-selector or --pod-label-selector flag")
+	_nodeLabelSelector        = flag.String("node-label-selector", "", "label name to use as selector for nodes")
+	_excludeNodeLabelSelector = flag.String("exclude-node-label-selector", "", "label name to use for exclusion selector")
+	_nodeLabelFilters         = multiStringFlag("node-filter", "filters to use with node-label-selector label."+
+		"these will be applied with either `notin` or `in' operator depending on whether you are using --exclude-node-label-selector or --node-label-selector")
+	clusterName             = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
+	address                 = flag.String("address", ":8085", "The address to expose prometheus metrics.")
+	kubernetes              = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
+	kubeConfigFile          = flag.String("kubeconfig", "", "Path to kubeconfig file with authorization and master location information.")
+	cloudConfig             = flag.String("cloud-config", "", "The path to the cloud provider configuration file.  Empty string for no configuration file.")
+	namespace               = flag.String("namespace", "kube-system", "Namespace in which cluster-autoscaler run.")
+	enforceNodeGroupMinSize = flag.Bool("enforce-node-group-min-size", false, "Should CA scale up the node group to the configured min size if needed.")
+	scaleDownEnabled        = flag.Bool("scale-down-enabled", true, "Should CA scale down the cluster")
+	scaleDownDelayAfterAdd  = flag.Duration("scale-down-delay-after-add", 10*time.Minute,
 		"How long after scale up that scale down evaluation resumes")
 	scaleDownDelayAfterDelete = flag.Duration("scale-down-delay-after-delete", 0,
 		"How long after node deletion that scale down evaluation resumes, defaults to scanInterval")
@@ -252,40 +256,35 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	}
 
 	// create selectors
-	var _podSelectorOperator selection.Operator
-	var _podLabel, _podLabelValue string
-	var _podRequirements *labels.Requirement
-	var podSelector labels.Selector
-
-	var _nodeLabel, _nodeLabelValue string
-	var _nodeSelectorOperator selection.Operator
-	var _nodeRequirements *labels.Requirement
-	var nodeSelector labels.Selector
+	podSelector := labels.NewSelector()
+	nodeSelector := labels.NewSelector()
+	var _podRequirements, _nodeRequirements *labels.Requirement
 
 	if *_podLabelSelector != "" && *_excludePodLabelSelector != "" {
 		klog.Fatal("--label-selector and --exclude-label-selector cannot both be used")
 	}
 
 	if *_podLabelSelector != "" {
-		_podLabel = strings.Split(*_podLabelSelector, "=")[0]
-		_podLabelValue = strings.Split(*_podLabelSelector, "=")[1]
-		_podSelectorOperator = selection.Equals
-		_podRequirements, err = labels.NewRequirement(_podLabel, _podSelectorOperator, []string{_podLabelValue})
-		if err != nil {
-			klog.Fatal("label selector requirement validation failed")
+		if len(*_podLabelFilters) == 0 {
+			klog.Fatal("you must specify at least one pod filter")
 		}
-		podSelector = labels.NewSelector()
+		_podSelectorOperator := selection.In
+		_podRequirements, err = labels.NewRequirement(*_podLabelSelector, _podSelectorOperator, *_podLabelFilters)
+		if err != nil {
+			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
+		}
 		podSelector = podSelector.Add(*_podRequirements)
 	} else if *_excludePodLabelSelector != "" {
-		_podLabel = strings.Split(*_excludePodLabelSelector, "=")[0]
-		_podLabelValue = strings.Split(*_excludePodLabelSelector, "=")[1]
-		_podSelectorOperator = selection.NotEquals
-		_podRequirements, err = labels.NewRequirement(_podLabel, _podSelectorOperator, []string{_podLabelValue})
-		if err != nil {
-			klog.Fatal("label selector requirement validation failed")
+		if len(*_podLabelFilters) == 0 {
+			klog.Fatal("you must specify at least one pod filter")
 		}
-		podSelector = labels.NewSelector()
+		_podSelectorOperator := selection.NotIn
+		_podRequirements, err = labels.NewRequirement(*_excludePodLabelSelector, _podSelectorOperator, *_podLabelFilters)
+		if err != nil {
+			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
+		}
 		podSelector = podSelector.Add(*_podRequirements)
+
 	} else {
 		podSelector = labels.Everything()
 	}
@@ -295,29 +294,33 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	}
 
 	if *_nodeLabelSelector != "" {
-		_nodeLabel = strings.Split(*_nodeLabelSelector, "=")[0]
-		_nodeLabelValue = strings.Split(*_nodeLabelSelector, "=")[1]
-		_nodeSelectorOperator = selection.Equals
-		_nodeRequirements, err = labels.NewRequirement(_nodeLabel, _nodeSelectorOperator, []string{_nodeLabelValue})
-		if err != nil {
-			klog.Fatal("label selector requirement validation failed")
+		if len(*_nodeLabelFilters) == 0 {
+			klog.Fatal("you must specify at least one node filter")
 		}
-		nodeSelector = labels.NewSelector()
+		_nodeSelectorOperator := selection.In
+		_nodeRequirements, err = labels.NewRequirement(*_nodeLabelSelector, _nodeSelectorOperator, *_nodeLabelFilters)
+		if err != nil {
+			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
+		}
 		nodeSelector = nodeSelector.Add(*_nodeRequirements)
-	} else if *_excludeNodeLabelSelector != "" {
-		_nodeLabel = strings.Split(*_excludeNodeLabelSelector, "=")[0]
-		_nodeLabelValue = strings.Split(*_excludeNodeLabelSelector, "=")[1]
-		_nodeSelectorOperator = selection.NotEquals
-		_nodeRequirements, err = labels.NewRequirement(_nodeLabel, _nodeSelectorOperator, []string{_nodeLabelValue})
-		if err != nil {
-			klog.Fatal("label selector requirement validation failed")
+	} else if len(*_excludeNodeLabelSelector) > 0 {
+		if len(*_nodeLabelFilters) == 0 {
+			klog.Fatal("you must specify at least one node filter")
 		}
-		nodeSelector = labels.NewSelector()
+		_nodeSelectorOperator := selection.NotIn
+		_nodeRequirements, err = labels.NewRequirement(*_excludeNodeLabelSelector, _nodeSelectorOperator, *_nodeLabelFilters)
+		if err != nil {
+			klog.Fatalf("label selector requirement validation failed: %s", err.Error())
+		}
 		nodeSelector = nodeSelector.Add(*_nodeRequirements)
 	} else {
 		nodeSelector = labels.Everything()
 	}
 
+	klog.Infof("Setting pod selector to %v\n", podSelector.String())
+	klog.Infof("Setting node selector to %v\n", nodeSelector.String())
+
+	os.Exit(0)
 	return config.AutoscalingOptions{
 		NodeGroupDefaults: config.NodeGroupAutoscalingOptions{
 			ScaleDownUtilizationThreshold:    *scaleDownUtilizationThreshold,
