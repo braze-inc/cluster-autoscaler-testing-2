@@ -17,6 +17,7 @@ limitations under the License.
 package kubernetes
 
 import (
+	"sync"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -150,7 +151,7 @@ func (r listerRegistryImpl) StatefulSetLister() v1appslister.StatefulSetLister {
 
 // PodLister lists pods.
 type PodLister interface {
-	List() ([]*apiv1.Pod, error)
+	List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error)
 }
 
 // UnschedulablePodLister lists unscheduled pods
@@ -158,19 +159,56 @@ type UnschedulablePodLister struct {
 	podLister v1lister.PodLister
 }
 
+func listUnschedulablePods(wg *sync.WaitGroup, workerId int, podsChan chan *apiv1.Pod, unschedulablePodsChan chan *apiv1.Pod) {
+
+	defer wg.Done()
+
+	for pod := range podsChan {
+		_, condition := podv1.GetPodCondition(&pod.Status, apiv1.PodScheduled)
+		if condition != nil && condition.Status == apiv1.ConditionFalse && condition.Reason == apiv1.PodReasonUnschedulable {
+			unschedulablePodsChan <- pod
+		}
+	}
+}
+
 // List returns all unscheduled pods.
-func (unschedulablePodLister *UnschedulablePodLister) List() ([]*apiv1.Pod, error) {
-	var unschedulablePods []*apiv1.Pod
-	allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
+func (unschedulablePodLister *UnschedulablePodLister) List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error) {
+
+	unschedulablePods := make([]*apiv1.Pod, 0)
+
+	//allPods, err := unschedulablePodLister.podLister.List(labels.Everything())
+	_unschedulablePods, err := unschedulablePodLister.podLister.List(podSelector)
 	if err != nil {
 		return unschedulablePods, err
 	}
-	for _, pod := range allPods {
-		_, condition := podv1.GetPodCondition(&pod.Status, apiv1.PodScheduled)
-		if condition != nil && condition.Status == apiv1.ConditionFalse && condition.Reason == apiv1.PodReasonUnschedulable {
-			unschedulablePods = append(unschedulablePods, pod)
-		}
+
+	podsChan := make(chan *apiv1.Pod, 1000)
+	unschedulablePodsChan := make(chan *apiv1.Pod, 1000)
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	for i := 0; i < workers; i++ {
+		go listUnschedulablePods(&wg, i, podsChan, unschedulablePodsChan)
 	}
+
+	// Push all pods into channel by looping over slice
+	go func(c chan *apiv1.Pod) {
+		for _, pod := range _unschedulablePods {
+			c <- pod
+		}
+		close(c)
+	}(podsChan)
+
+	go func() {
+		wg.Wait()
+		close(unschedulablePodsChan)
+	}()
+
+	for p := range unschedulablePodsChan {
+		unschedulablePods = append(unschedulablePods, p)
+	}
+
 	return unschedulablePods, nil
 }
 
@@ -199,7 +237,7 @@ type ScheduledPodLister struct {
 }
 
 // List returns all scheduled pods.
-func (lister *ScheduledPodLister) List() ([]*apiv1.Pod, error) {
+func (lister *ScheduledPodLister) List(workers int, podSelector labels.Selector) ([]*apiv1.Pod, error) {
 	return lister.podLister.List(labels.Everything())
 }
 
@@ -220,7 +258,8 @@ func NewScheduledPodLister(kubeClient client.Interface, stopchannel <-chan struc
 
 // NodeLister lists nodes.
 type NodeLister interface {
-	List() ([]*apiv1.Node, error)
+	//List() ([]*apiv1.Node, error)
+	List(nodeSelector labels.Selector) ([]*apiv1.Node, error)
 	Get(name string) (*apiv1.Node, error)
 }
 
@@ -253,11 +292,12 @@ func NewNodeLister(kubeClient client.Interface, filter func(*apiv1.Node) bool, s
 }
 
 // List returns list of nodes.
-func (l *nodeListerImpl) List() ([]*apiv1.Node, error) {
+func (l *nodeListerImpl) List(nodeSelector labels.Selector) ([]*apiv1.Node, error) {
 	var nodes []*apiv1.Node
 	var err error
 
-	nodes, err = l.nodeLister.List(labels.Everything())
+	//nodes, err = l.nodeLister.List(labels.Everything())
+	nodes, err = l.nodeLister.List(nodeSelector)
 	if err != nil {
 		return []*apiv1.Node{}, err
 	}

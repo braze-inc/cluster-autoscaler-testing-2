@@ -98,7 +98,8 @@ func initializeDefaultOptions(opts *AutoscalerOptions) error {
 	}
 	if opts.ExpanderStrategy == nil {
 		expanderFactory := factory.NewFactory()
-		expanderFactory.RegisterDefaultExpanders(opts.CloudProvider, opts.AutoscalingKubeClients, opts.KubeClient, opts.ConfigNamespace, opts.GRPCExpanderCert, opts.GRPCExpanderURL)
+		//expanderFactory.RegisterDefaultExpanders(opts.CloudProvider, opts.AutoscalingKubeClients, opts.KubeClient, opts.ConfigNamespace, opts.GRPCExpanderCert, opts.GRPCExpanderURL)
+		expanderFactory.RegisterDefaultExpanders(opts.CloudProvider, opts.AutoscalingKubeClients, opts.KubeClient, opts.ConfigNamespace, opts.GRPCExpanderCert, opts.GRPCExpanderURL, opts.NodeLabelSelector)
 		expanderStrategy, err := expanderFactory.Build(strings.Split(opts.ExpanderNames, ","))
 		if err != nil {
 			return err

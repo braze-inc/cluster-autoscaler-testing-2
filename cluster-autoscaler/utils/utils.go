@@ -17,6 +17,8 @@ limitations under the License.
 package utils
 
 import (
+	"strings"
+
 	apiv1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	klog "k8s.io/klog/v2"
@@ -68,6 +70,7 @@ func PodSpecSemanticallyEqual(p1 apiv1.PodSpec, p2 apiv1.PodSpec) bool {
 }
 
 func sanitizePodSpec(podSpec apiv1.PodSpec) apiv1.PodSpec {
+	dropInitContainers(&podSpec)
 	dropProjectedVolumesAndMounts(&podSpec)
 	dropHostname(&podSpec)
 	return podSpec
@@ -77,7 +80,9 @@ func dropProjectedVolumesAndMounts(podSpec *apiv1.PodSpec) {
 	projectedVolumeNames := map[string]bool{}
 	var volumes []apiv1.Volume
 	for _, v := range podSpec.Volumes {
-		if v.Projected == nil {
+		if strings.Contains(v.Name, "kube-api-access") {
+			continue
+		} else if v.Projected == nil {
 			volumes = append(volumes, v)
 		} else {
 			projectedVolumeNames[v.Name] = true
@@ -88,7 +93,9 @@ func dropProjectedVolumesAndMounts(podSpec *apiv1.PodSpec) {
 	for i := range podSpec.Containers {
 		var volumeMounts []apiv1.VolumeMount
 		for _, mount := range podSpec.Containers[i].VolumeMounts {
-			if ok := projectedVolumeNames[mount.Name]; !ok {
+			if strings.Contains(mount.Name, "kube-api-access") {
+				continue
+			} else if ok := projectedVolumeNames[mount.Name]; !ok {
 				volumeMounts = append(volumeMounts, mount)
 			}
 		}
@@ -96,6 +103,9 @@ func dropProjectedVolumesAndMounts(podSpec *apiv1.PodSpec) {
 	}
 }
 
+func dropInitContainers(podSpec *apiv1.PodSpec) {
+	podSpec.InitContainers = make([]apiv1.Container, 0)
+}
 func dropHostname(podSpec *apiv1.PodSpec) {
 	podSpec.Hostname = ""
 }

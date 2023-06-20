@@ -17,8 +17,9 @@ limitations under the License.
 package core
 
 import (
-	"k8s.io/autoscaler/cluster-autoscaler/utils"
 	"reflect"
+
+	"k8s.io/autoscaler/cluster-autoscaler/utils"
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +53,7 @@ type equivalenceGroup struct {
 	representant *apiv1.Pod
 }
 
-const maxEquivalenceGroupsByController = 10
+const maxEquivalenceGroupsByController = 30
 
 // groupPodsBySchedulingProperties groups pods based on scheduling properties. Group ID is meaningless.
 // TODO(x13n): refactor this to have shared logic with PodSchedulableMap.
