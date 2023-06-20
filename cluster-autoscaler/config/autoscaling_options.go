@@ -18,6 +18,8 @@ package config
 
 import (
 	"time"
+
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 // GpuLimits define lower and upper bound on GPU instances of given type in cluster
@@ -215,4 +217,12 @@ type AutoscalingOptions struct {
 	ParallelDrain bool
 	// Number of workers to use for concurrency
 	WorkerThreads int
+	// pod selector
+	PodLabelSelector labels.Selector
+	// exclusion pod selector
+	ExcludePodLabelSelector labels.Selector
+	// node selector
+	NodeLabelSelector labels.Selector
+	// exclusion pod selector
+	ExcludeNodeLabelSelector labels.Selector
 }

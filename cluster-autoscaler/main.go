@@ -35,6 +35,8 @@ import (
 	"github.com/spf13/pflag"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apiserver/pkg/server/mux"
 	"k8s.io/apiserver/pkg/server/routes"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
@@ -90,7 +92,15 @@ func multiStringFlag(name string, usage string) *MultiStringFlag {
 }
 
 var (
-	workerThreads           = flag.Int("workers", 5, "number of workers to use for concurrency")
+	workerThreads            = flag.Int("workers", 5, "number of workers to use for concurrency")
+	_podLabelSelector        = flag.String("pod-label-selector", "", "label name to use as selector for pods")
+	_excludePodLabelSelector = flag.String("exclude-pod-label-selector", "", "label name to use for exclusion selector")
+	_podLabelFilters         = multiStringFlag("pod-filter", "filters to use with pod-label-selector label."+
+		"these will be applied with either `notin` or `in' operator depending on whether you use the --exclude-pod-label-selector or --pod-label-selector flag")
+	_nodeLabelSelector        = flag.String("node-label-selector", "", "label name to use as selector for nodes")
+	_excludeNodeLabelSelector = flag.String("exclude-node-label-selector", "", "label name to use for exclusion selector")
+	_nodeLabelFilters         = multiStringFlag("node-filter", "filters to use with node-label-selector label."+
+		"these will be applied with either `notin` or `in' operator depending on whether you are using --exclude-node-label-selector or --node-label-selector")
 	clusterName             = flag.String("cluster-name", "", "Autoscaled cluster name, if available")
 	address                 = flag.String("address", ":8085", "The address to expose prometheus metrics.")
 	kubernetes              = flag.String("kubernetes", "", "Kubernetes master location. Leave blank for default")
@@ -224,6 +234,37 @@ var (
 	enableDatadogProfiling = flag.Bool("enable-datadog-profiling", false, "Whether Datadog profiling should be enabled.")
 )
 
+// Helper function to create a selector based on label selector and filters
+func createSelector(labelSelector, excludeLabelSelector string, filters []string) (labels.Selector, error) {
+	selector := labels.Everything()
+
+	if labelSelector != "" && excludeLabelSelector != "" {
+		return nil, fmt.Errorf("label-selector and exclude-label-selector options are mutually exclusive for the same type")
+	}
+
+	if labelSelector != "" {
+		if len(filters) == 0 {
+			return nil, fmt.Errorf("you must specify at least one filter")
+		}
+		requirement, err := labels.NewRequirement(labelSelector, selection.In, filters)
+		if err != nil {
+			return nil, fmt.Errorf("label selector requirement validation failed: %s", err.Error())
+		}
+		selector = selector.Add(*requirement)
+	} else if excludeLabelSelector != "" {
+		if len(filters) == 0 {
+			return nil, fmt.Errorf("you must specify at least one filter")
+		}
+		requirement, err := labels.NewRequirement(excludeLabelSelector, selection.NotIn, filters)
+		if err != nil {
+			return nil, fmt.Errorf("label selector requirement validation failed: %s", err.Error())
+		}
+		selector = selector.Add(*requirement)
+	}
+
+	return selector, nil
+}
+
 func createAutoscalingOptions() config.AutoscalingOptions {
 	minCoresTotal, maxCoresTotal, err := parseMinMaxFlag(*coresTotal)
 	if err != nil {
@@ -244,6 +285,20 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 	if *maxDrainParallelismFlag > 1 && !*parallelDrain {
 		klog.Fatalf("Invalid configuration, could not use --max-drain-parallelism > 1 if --parallel-drain is false")
 	}
+
+	podSelector, err := createSelector(*_podLabelSelector, *_excludePodLabelSelector, *_podLabelFilters)
+	if err != nil {
+		klog.Fatalf("Failed to create pod selector: %s", err.Error())
+	}
+
+	// create node selector
+	nodeSelector, err := createSelector(*_nodeLabelSelector, *_excludeNodeLabelSelector, *_nodeLabelFilters)
+	if err != nil {
+		klog.Fatalf("Failed to create node selector: %s", err.Error())
+	}
+	klog.Infof("Setting pod selector to %v\n", podSelector.String())
+	klog.Infof("Setting node selector to %v\n", nodeSelector.String())
+
 	return config.AutoscalingOptions{
 		NodeGroupDefaults: config.NodeGroupAutoscalingOptions{
 			ScaleDownUtilizationThreshold:    *scaleDownUtilizationThreshold,
@@ -252,6 +307,8 @@ func createAutoscalingOptions() config.AutoscalingOptions {
 			ScaleDownUnreadyTime:             *scaleDownUnreadyTime,
 		},
 		WorkerThreads:                      *workerThreads,
+		PodLabelSelector:                   podSelector,
+		NodeLabelSelector:                  nodeSelector,
 		CloudConfig:                        *cloudConfig,
 		CloudProviderName:                  *cloudProviderFlag,
 		NodeGroupAutoDiscovery:             *nodeGroupAutoDiscoveryFlag,

@@ -23,6 +23,7 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 
 	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
@@ -372,7 +373,7 @@ func (a *Actuator) createSnapshot(nodes []*apiv1.Node) (clustersnapshot.ClusterS
 	knownNodes := make(map[string]bool)
 	snapshot := clustersnapshot.NewBasicClusterSnapshot()
 
-	scheduledPods, err := a.ctx.ScheduledPodLister().List(a.ctx.WorkerThreads)
+	scheduledPods, err := a.ctx.ScheduledPodLister().List(a.ctx.WorkerThreads, labels.Everything())
 	if err != nil {
 		return nil, err
 	}
