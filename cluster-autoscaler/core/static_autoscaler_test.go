@@ -65,7 +65,7 @@ type podListerMock struct {
 	mock.Mock
 }
 
-func (l *podListerMock) List() ([]*apiv1.Pod, error) {
+func (l *podListerMock) List(workers int, selector labels.Selector) ([]*apiv1.Pod, error) {
 	args := l.Called()
 	return args.Get(0).([]*apiv1.Pod), args.Error(1)
 }
@@ -247,6 +247,7 @@ func TestStaticAutoscalerRunOnce(t *testing.T) {
 	scheduledPodMock.On("List").Return([]*apiv1.Pod{p1}, nil).Twice()
 	unschedulablePodMock.On("List").Return([]*apiv1.Pod{p2}, nil).Once()
 	daemonSetListerMock.On("List", labels.Everything()).Return([]*appsv1.DaemonSet{}, nil).Once()
+	//podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 	podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 
 	err = autoscaler.RunOnce(time.Now())

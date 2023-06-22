@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	. "k8s.io/autoscaler/cluster-autoscaler/utils/test"
 
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ type testNodeLister struct {
 	list []*apiv1.Node
 }
 
-func (n *testNodeLister) List() ([]*apiv1.Node, error) {
+func (n *testNodeLister) List(selector labels.Selector) ([]*apiv1.Node, error) {
 	return n.list, nil
 }
 

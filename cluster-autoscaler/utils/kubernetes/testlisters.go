@@ -66,7 +66,7 @@ type TestNodeLister struct {
 }
 
 // List returns all nodes in test lister.
-func (l *TestNodeLister) List() ([]*apiv1.Node, error) {
+func (l *TestNodeLister) List(selector labels.Selector) ([]*apiv1.Node, error) {
 	return l.nodes, nil
 }
 

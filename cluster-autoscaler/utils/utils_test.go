@@ -17,10 +17,11 @@ limitations under the License.
 package utils
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/autoscaler/cluster-autoscaler/utils/test"
-	"testing"
 )
 
 func TestPodSpecSemanticallyEqual(t *testing.T) {
@@ -174,6 +175,41 @@ func TestSanitizePodSpec(t *testing.T) {
 					{Image: "foo/baz", Name: "foo/baz", VolumeMounts: []apiv1.VolumeMount{{Name: "volume-nz94b"}, {Name: "empty-dir"}}},
 					{Image: "foo/qux", Name: "foo/qux"},
 				},
+			},
+		},
+		{
+			name: "pod spec with a mix of volume types, and init container",
+			inputPodSpec: apiv1.PodSpec{
+				NodeSelector: map[string]string{"foo": "bar"},
+				Volumes: []apiv1.Volume{
+					{Name: "volume-nz94b", VolumeSource: apiv1.VolumeSource{FlexVolume: &apiv1.FlexVolumeSource{Driver: "testDriver"}}},
+					{Name: "kube-api-access-nz94a", VolumeSource: apiv1.VolumeSource{Projected: projectedSAVol}},
+					{Name: "projected2", VolumeSource: apiv1.VolumeSource{Projected: projectedSAVol}},
+					{Name: "empty-dir", VolumeSource: apiv1.VolumeSource{EmptyDir: &apiv1.EmptyDirVolumeSource{Medium: ""}}},
+				},
+				Containers: []apiv1.Container{
+					{Image: "foo/bar", Name: "foobar", VolumeMounts: []apiv1.VolumeMount{{Name: "kube-api-access-nz94a"}}},
+					{Image: "foo/baz", Name: "foo/baz", VolumeMounts: []apiv1.VolumeMount{{Name: "volume-nz94b"}, {Name: "kube-api-access-nz94a"}, {Name: "empty-dir"}, {Name: "projected2"}}},
+					{Image: "foo/qux", Name: "foo/qux"},
+				},
+				InitContainers: []apiv1.Container{
+					{Image: "foo/bar", Name: "foobar", VolumeMounts: []apiv1.VolumeMount{{Name: "kube-api-access-nz94a"}}},
+					{Image: "foo/baz", Name: "foo/baz", VolumeMounts: []apiv1.VolumeMount{{Name: "volume-nz94b"}, {Name: "kube-api-access-nz94a"}, {Name: "empty-dir"}, {Name: "projected2"}}},
+					{Image: "foo/qux", Name: "foo/qux"},
+				},
+			},
+			outputPodSpec: apiv1.PodSpec{
+				NodeSelector: map[string]string{"foo": "bar"},
+				Volumes: []apiv1.Volume{
+					{Name: "volume-nz94b", VolumeSource: apiv1.VolumeSource{FlexVolume: &apiv1.FlexVolumeSource{Driver: "testDriver"}}},
+					{Name: "empty-dir", VolumeSource: apiv1.VolumeSource{EmptyDir: &apiv1.EmptyDirVolumeSource{Medium: ""}}},
+				},
+				Containers: []apiv1.Container{
+					{Image: "foo/bar", Name: "foobar"},
+					{Image: "foo/baz", Name: "foo/baz", VolumeMounts: []apiv1.VolumeMount{{Name: "volume-nz94b"}, {Name: "empty-dir"}}},
+					{Image: "foo/qux", Name: "foo/qux"},
+				},
+				InitContainers: []apiv1.Container{},
 			},
 		},
 	}
