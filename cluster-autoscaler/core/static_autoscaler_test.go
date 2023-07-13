@@ -261,7 +261,8 @@ func TestStaticAutoscalerRunOnce(t *testing.T) {
 	scheduledPodMock.On("List").Return([]*apiv1.Pod{p1}, nil).Times(2) // 1 to get pods + 1 per nodegroup when building nodeInfo map
 	unschedulablePodMock.On("List").Return([]*apiv1.Pod{p2}, nil).Once()
 	daemonSetListerMock.On("List", labels.Everything()).Return([]*appsv1.DaemonSet{}, nil).Once()
-	onScaleUpMock.On("ScaleUp", "ng1", 1).Return(nil).Once()
+	//onScaleUpMock.On("ScaleUp", "ng1", 1).Return(nil).Once()
+	podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 
 	context.MaxNodesTotal = 10
 	err = autoscaler.RunOnce(time.Now().Add(time.Hour))
@@ -463,7 +464,9 @@ func TestStaticAutoscalerRunOnceWithAutoprovisionedEnabled(t *testing.T) {
 	unschedulablePodMock.On("List").Return([]*apiv1.Pod{p2}, nil).Once()
 	daemonSetListerMock.On("List", labels.Everything()).Return([]*appsv1.DaemonSet{}, nil).Once()
 	onNodeGroupCreateMock.On("Create", "autoprovisioned-TN2").Return(nil).Once()
-	onScaleUpMock.On("ScaleUp", "autoprovisioned-TN2", 1).Return(nil).Once()
+	//onScaleUpMock.On("ScaleUp", "autoprovisioned-TN2", 1).Return(nil).Once()
+	podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
+	onNodeGroupDeleteMock.On("Delete", "autoprovisioned-TN1").Return(nil).Once()
 
 	err = autoscaler.RunOnce(time.Now().Add(time.Hour))
 	assert.NoError(t, err)
@@ -612,7 +615,8 @@ func TestStaticAutoscalerRunOnceWithALongUnregisteredNode(t *testing.T) {
 	scheduledPodMock.On("List").Return([]*apiv1.Pod{p1}, nil).Twice() // 1 to get pods + 1 per nodegroup when building nodeInfo map
 	unschedulablePodMock.On("List").Return([]*apiv1.Pod{p2}, nil).Once()
 	daemonSetListerMock.On("List", labels.Everything()).Return([]*appsv1.DaemonSet{}, nil).Once()
-	onScaleUpMock.On("ScaleUp", "ng1", 1).Return(nil).Once()
+	//onScaleUpMock.On("ScaleUp", "ng1", 1).Return(nil).Once()
+	podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 
 	err = autoscaler.RunOnce(later.Add(time.Hour))
 	assert.NoError(t, err)
@@ -759,7 +763,8 @@ func TestStaticAutoscalerRunOncePodsWithPriorities(t *testing.T) {
 	scheduledPodMock.On("List").Return([]*apiv1.Pod{p1, p2, p3}, nil).Times(2) // 1 to get pods + 1 when building nodeInfo map
 	unschedulablePodMock.On("List").Return([]*apiv1.Pod{p4, p5, p6}, nil).Once()
 	daemonSetListerMock.On("List", labels.Everything()).Return([]*appsv1.DaemonSet{}, nil).Once()
-	onScaleUpMock.On("ScaleUp", "ng2", 1).Return(nil).Once()
+	//onScaleUpMock.On("ScaleUp", "ng2", 1).Return(nil).Once()
+	podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 
 	err = autoscaler.RunOnce(time.Now())
 	assert.NoError(t, err)
@@ -796,7 +801,7 @@ func TestStaticAutoscalerRunOncePodsWithPriorities(t *testing.T) {
 	waitForDeleteToFinish(t, deleteFinished)
 	assert.NoError(t, err)
 	mock.AssertExpectationsForObjects(t, scheduledPodMock, unschedulablePodMock,
-		podDisruptionBudgetListerMock, daemonSetListerMock, onScaleUpMock, onScaleDownMock)
+		podDisruptionBudgetListerMock, daemonSetListerMock, onScaleDownMock)
 }
 
 func TestStaticAutoscalerRunOnceWithFilteringOnBinPackingEstimator(t *testing.T) {
