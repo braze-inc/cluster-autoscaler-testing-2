@@ -66,6 +66,7 @@ type podListerMock struct {
 }
 
 func (l *podListerMock) List(workers int, selector labels.Selector) ([]*apiv1.Pod, error) {
+	fmt.Println("pod-lister-mock")
 	args := l.Called()
 	return args.Get(0).([]*apiv1.Pod), args.Error(1)
 }
@@ -75,6 +76,7 @@ type podDisruptionBudgetListerMock struct {
 }
 
 func (l *podDisruptionBudgetListerMock) List() ([]*policyv1.PodDisruptionBudget, error) {
+	fmt.Println("pdb-lister-mock")
 	args := l.Called()
 	return args.Get(0).([]*policyv1.PodDisruptionBudget), args.Error(1)
 }
@@ -84,21 +86,25 @@ type daemonSetListerMock struct {
 }
 
 func (l *daemonSetListerMock) List(selector labels.Selector) ([]*appsv1.DaemonSet, error) {
+	fmt.Println("ds-lister-mock")
 	args := l.Called(selector)
 	return args.Get(0).([]*appsv1.DaemonSet), args.Error(1)
 }
 
 func (l *daemonSetListerMock) DaemonSets(namespace string) v1appslister.DaemonSetNamespaceLister {
+	fmt.Println("ds-ns-listermock")
 	args := l.Called(namespace)
 	return args.Get(0).(v1appslister.DaemonSetNamespaceLister)
 }
 
 func (l *daemonSetListerMock) GetPodDaemonSets(pod *apiv1.Pod) ([]*appsv1.DaemonSet, error) {
+	fmt.Println("pod-ds-listermock")
 	args := l.Called()
 	return args.Get(0).([]*appsv1.DaemonSet), args.Error(1)
 }
 
 func (l *daemonSetListerMock) GetHistoryDaemonSets(history *appsv1.ControllerRevision) ([]*appsv1.DaemonSet, error) {
+	fmt.Println("history-ds-listermock")
 	args := l.Called()
 	return args.Get(0).([]*appsv1.DaemonSet), args.Error(1)
 }
@@ -247,7 +253,6 @@ func TestStaticAutoscalerRunOnce(t *testing.T) {
 	scheduledPodMock.On("List").Return([]*apiv1.Pod{p1}, nil).Twice()
 	unschedulablePodMock.On("List").Return([]*apiv1.Pod{p2}, nil).Once()
 	daemonSetListerMock.On("List", labels.Everything()).Return([]*appsv1.DaemonSet{}, nil).Once()
-	//podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 	podDisruptionBudgetListerMock.On("List").Return([]*policyv1.PodDisruptionBudget{}, nil).Once()
 
 	err = autoscaler.RunOnce(time.Now())
